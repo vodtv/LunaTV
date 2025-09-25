@@ -1,0 +1,96 @@
+name: Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # 每 6 小时运行一次
+  workflow_dispatch:       # 手动触发
+  push:
+    branches:
+      - main               # 当 main 分支有更新时触发
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync_latest_from_upstream:
+    name: Sync latest commits from upstream repo
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: run a standard checkout action
+      - name: Checkout target repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: 添加上游仓库并拉取 main 分支
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/SzeMeng76/LunaTV.git
+          git fetch upstream
+
+      # Step 3: 合并上游 main 分支到当前 main
+      - name: Merge upstream/main into main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git merge upstream/main --allow-unrelated-histories --no-edit || true
+
+      # Step 4: 推送合并后的 main 分支到自己的仓库
+      - name: Push changes
+        run: |
+          git push origin main
+
+      # Step 5: 检查 VERSION.txt 和 CHANGELOG 是否更新
+      - name: Check if VERSION.txt or CHANGELOG changed
+        id: check_files
+        run: |
+          git fetch origin main
+          LAST_COMMIT=$(git log -1 --pretty=format:%H)
+          echo "Last commit: $LAST_COMMIT"
+
+          if git diff-tree --no-commit-id --name-only -r $LAST_COMMIT | grep -E '^(VERSION.txt|CHANGELOG)$'; then
+            echo "files_changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "files_changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Step 6: 读取 VERSION.txt 版本号
+      - name: Read VERSION.txt
+        id: read_version
+        if: steps.check_files.outputs.files_changed == 'true'
+        run: |
+          VERSION=$(cat VERSION.txt | tr -d ' \n')
+          echo "VERSION=$VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # Step 7: 检查 tag 是否存在
+      - name: Check if tag exists
+        id: check_tag
+        if: steps.read_version.outputs.version != ''
+        run: |
+          if git rev-parse "refs/tags/${{ steps.read_version.outputs.version }}" >/dev/null 2>&1; then
+            echo "tag_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Step 8: 仅在满足条件时触发 release.yml
+      - name: Trigger Release workflow
+        if: steps.check_files.outputs.files_changed == 'true' && steps.check_tag.outputs.tag_exists == 'false'
+        run: |
+          echo "New version detected: ${{ steps.read_version.outputs.version }}. Triggering release.yml..."
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/release.yml/dispatches \
+            -d '{"ref":"main"}'
+
+      - name: Delete workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 2
