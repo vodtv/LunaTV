@@ -151,36 +151,17 @@ export async function POST(req: NextRequest) {
       // 清除缓存，确保下次获取配置时是最新的
       clearConfigCache();
 
-      // 等待并验证 Upstash 数据同步完成（最多等待5秒）
-      // 主动检查用户是否已存在于配置中，确保数据真正同步完成
-      const maxRetries = 10;
-      let synced = false;
-      for (let i = 0; i < maxRetries; i++) {
-        await new Promise(resolve => setTimeout(resolve, 500)); // 每次等待500ms
-        const freshConfig = await getConfig();
-        const userInConfig = freshConfig.UserConfig.Users.find(u => u.username === username);
-        if (userInConfig) {
-          synced = true;
-          console.log(`用户 ${username} 已同步到配置，耗时 ${(i + 1) * 500}ms`);
-          break;
-        }
-      }
-
-      if (!synced) {
-        console.warn(`用户 ${username} 同步超时，但继续注册流程`);
-      }
-
-      // 注册成功后自动登录，设置与登录API一致的cookie
-      const response = NextResponse.json({
-        ok: true,
-        message: '注册成功，已自动登录'
+      // 注册成功后自动登录
+      const response = NextResponse.json({ 
+        ok: true, 
+        message: '注册成功，已自动登录' 
       });
-
+      
       const cookieValue = await generateAuthCookie(
         username,
         password,
         'user',
-        false  // 数据库模式不在cookie中存储密码，只存储签名
+        false
       );
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
