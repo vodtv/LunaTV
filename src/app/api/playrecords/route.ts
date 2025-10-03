@@ -98,7 +98,8 @@ export async function POST(request: NextRequest) {
       ...record,
       save_time: record.save_time ?? Date.now(),
       // 关键修复：设置原始集数，首次观看时使用当前集数，后续保持不变
-      original_episodes: existingRecord?.original_episodes || record.total_episodes,
+      // 使用数据库中的 total_episodes（未被更新的值）作为 fallback，而不是 record.total_episodes（可能已被 watching-updates 更新过）
+      original_episodes: existingRecord?.original_episodes || existingRecord?.total_episodes || record.total_episodes,
     } as PlayRecord;
 
     await db.savePlayRecord(authInfo.username, source, id, finalRecord);
