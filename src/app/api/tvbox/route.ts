@@ -234,7 +234,7 @@ export async function GET(request: NextRequest) {
 
         // 解析 detail 字段：支持 JSON 扩展配置（CSP源、自定义jar等）
         const detail = (source.detail || '').trim();
-        let siteExt = '';
+        const siteExt = ''; // 🔑 强制为空，忽略配置中的 ext
         let siteJar: string | undefined;
 
         if (detail) {
@@ -243,17 +243,20 @@ export async function GET(request: NextRequest) {
             if (obj) {
               if (obj.type !== undefined) type = obj.type;
               if (obj.api) source.api = obj.api;
-              if (obj.ext !== undefined) {
-                siteExt = typeof obj.ext === 'string' ? obj.ext : JSON.stringify(obj.ext);
-              }
+              // 🔑 关键修复：强制忽略 ext 字段
+              // 原因：很多源的 ext 是网站首页 URL（如 http://caiji.dyttzyapi.com）
+              // Box-main 会访问这个 URL 并把返回的 HTML 当作 extend 参数传给 API，导致无数据
+              // if (obj.ext !== undefined) {
+              //   siteExt = typeof obj.ext === 'string' ? obj.ext : JSON.stringify(obj.ext);
+              // }
               if (obj.jar) {
                 siteJar = obj.jar;
                 if (!globalSpiderJar) globalSpiderJar = obj.jar;
               }
             }
           } catch {
-            // 非 JSON 时作为 ext 字符串
-            siteExt = detail;
+            // 非 JSON 时也不作为 ext 字符串
+            // siteExt = detail;
           }
         }
 
