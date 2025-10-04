@@ -720,8 +720,19 @@ export async function GET(request: NextRequest) {
       } as TVBoxConfig;
     } else if (mode === 'yingshicang') {
       // 影视仓专用模式：优化兼容性和播放规则
+      // 保存诊断字段
+      const spiderDiagnostics = {
+        spider_url: tvboxConfig.spider_url,
+        spider_md5: tvboxConfig.spider_md5,
+        spider_cached: tvboxConfig.spider_cached,
+        spider_real_size: tvboxConfig.spider_real_size,
+        spider_tried: tvboxConfig.spider_tried,
+        spider_success: tvboxConfig.spider_success,
+      };
+
       tvboxConfig = {
-        spider: 'https://gitcode.net/qq_26898231/TVBox/-/raw/main/JAR/XC.jar;md5;e53eb37c4dc3dce1c8ee0c996ca3a024',
+        spider: finalSpiderUrl, // 使用智能获取的 spider jar
+        ...spiderDiagnostics, // 保留诊断字段
         wallpaper: 'https://picsum.photos/1920/1080/?blur=1',
         sites: tvboxConfig.sites,
         lives: tvboxConfig.lives,
