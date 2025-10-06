@@ -332,8 +332,15 @@ Zeabur automatically detects the Dockerfile in your project and completes the de
 
 3. **Add KVRocks Database**
    - In the same project, click "Add Service" > "Prebuilt Services"
-   - Search and add "KVRocks" (or manually add Docker image)
+   - Search and add "KVRocks" (or manually add Docker image `apache/kvrocks`)
    - Zeabur will automatically create the KVRocks service
+   - **Remember the service name** (e.g., `apachekvrocks`), you'll need it later
+   - **Configure Persistent Volume (Important)**:
+     * Click on KVRocks service to enter settings page
+     * Find "Volumes" section, click "Add Volume"
+     * Volume ID: `kvrocks-data` (customizable, only letters, numbers, and hyphens)
+     * Path: `/data`
+     * Save configuration
 
 4. **Configure Environment Variables**
 
@@ -346,7 +353,7 @@ Zeabur automatically detects the Dockerfile in your project and completes the de
 
    # Required: Storage Configuration
    NEXT_PUBLIC_STORAGE_TYPE=kvrocks
-   KVROCKS_URL=redis://${KVROCKS_HOST}:${KVROCKS_PORT}
+   KVROCKS_URL=redis://apachekvrocks:6666
 
    # Optional: Site Configuration
    SITE_BASE=https://your-domain.zeabur.app
@@ -358,7 +365,10 @@ Zeabur automatically detects the Dockerfile in your project and completes the de
    NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
    ```
 
-   **Note**: `${KVROCKS_HOST}` and `${KVROCKS_PORT}` will be automatically injected by Zeabur, or you can manually enter the internal connection address of the KVRocks service.
+   **Note**:
+   - The hostname `apachekvrocks` in `KVROCKS_URL` is the KVRocks service name
+   - Replace with your actual service name if different
+   - **Important**: Both services must be in the same Zeabur Project to communicate
 
 5. **Deploy Project**
    - After environment variable configuration, Zeabur will automatically start building and deploying
@@ -385,20 +395,86 @@ If you need to use pre-built images, you can deploy directly using prebuilt imag
    - Click "Add Service" > "Docker Images"
    - Enter image name: `apache/kvrocks`
    - Configure port: `6666` (TCP)
-   - Add persistent volume: Mount path `/var/lib/kvrocks`
+   - **Remember the service name** (usually `apachekvrocks`)
+   - **Configure Persistent Volume (Important)**:
+     * Find "Volumes" section in service settings
+     * Click "Add Volume" to add new volume
+     * Volume ID: `kvrocks-data` (customizable, only letters, numbers, and hyphens)
+     * Path: `/data`
+     * Save configuration
 
-3. **Configure Environment Variables** (Same as Option 1)
+   > 💡 **Important**: Persistent volume path must be set to `/data`, so KVRocks will automatically create config files and database files in that directory.
+
+3. **Configure Environment Variables**
+
+   Add the following environment variables to your LunaTV service:
+
+   ```env
+   # Required: Admin Account
+   USERNAME=admin
+   PASSWORD=your_secure_password
+
+   # Required: Storage Configuration
+   NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+   KVROCKS_URL=redis://apachekvrocks:6666
+
+   # Optional: Site Configuration
+   SITE_BASE=https://your-domain.zeabur.app
+   NEXT_PUBLIC_SITE_NAME=LunaTV Enhanced
+   ANNOUNCEMENT=Welcome to LunaTV Enhanced Edition
+
+   # Optional: Douban Proxy (Recommended)
+   NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
+   NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
+   ```
+
+   **Note**:
+   - Use service name as hostname: `redis://apachekvrocks:6666`
+   - Replace with actual service name if different
+   - Both services must be in the same Project
 
 4. **Deployment Complete**
    - Zeabur will automatically pull images and start services
    - Access the service once it's ready
+
+#### 🔄 Updating Docker Images (Option 2 Only)
+
+When a new Docker image version is released, Zeabur won't automatically update. Manual trigger is required:
+
+**Update Steps:**
+
+1. **Enter Service Settings**
+   - Click on the service you want to update (LunaTV or KVRocks)
+   - Enter service detail page
+   - Switch to **"Settings"** tab
+
+2. **Update Image Tag**
+   - Find **"Service Image"** section
+   - You'll see two input fields: image name and tag
+   - Click on the tag input field (second field), modify or re-enter the tag
+   - For example: Change `latest` to `latest-new` then back to `latest` (force refresh)
+   - Save changes
+
+3. **Automatic Redeployment**
+   - Zeabur will automatically pull the latest image and redeploy
+   - If image pull fails, Zeabur will prompt you to modify again
+
+**Image Tag Strategy:**
+
+- `ghcr.io/szemeng76/lunatv:latest` - Always use latest version
+- `ghcr.io/szemeng76/lunatv:v1.2.3` - Fixed version (recommended for production)
+
+> 💡 **Tips**:
+> - When using `latest` tag, modifying the tag forces Zeabur to re-pull the image
+> - **Restart button won't pull new images**, it only restarts the existing container
+> - Option 1 (Git deployment) auto-updates on Git push, no manual operation needed
 
 #### ✨ Zeabur Deployment Advantages
 
 - ✅ **Automatic HTTPS**: Free SSL certificate auto-configured
 - ✅ **Global CDN**: Built-in worldwide acceleration
 - ✅ **Zero-Config Deployment**: Automatic Dockerfile detection
-- ✅ **Service Discovery**: Automatic container interconnection
+- ✅ **Service Discovery**: Containers communicate via service names automatically
 - ✅ **Persistent Storage**: Volume mounting support
 - ✅ **CI/CD Integration**: Auto-deployment on Git push
 - ✅ **Real-time Logs**: Web interface for runtime logs
@@ -407,7 +483,8 @@ If you need to use pre-built images, you can deploy directly using prebuilt imag
 
 - **Pricing Model**: Pay-as-you-go based on actual resource usage, free tier sufficient for small projects
 - **Region Selection**: Recommend choosing the region closest to your users
-- **Environment Variable References**: Use `${VARIABLE_NAME}` syntax to reference other service variables
+- **Service Networking**: Services in the same Project communicate via service names (e.g., `apachekvrocks:6666`)
+- **Persistent Storage**: KVRocks must configure persistent volume to `/data` directory, otherwise data will be lost on restart
 
 ---
 

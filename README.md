@@ -332,8 +332,15 @@ Zeabur 会自动检测项目中的 Dockerfile 并完成部署。
 
 3. **添加 KVRocks 数据库**
    - 在同一项目中点击 "Add Service" > "Prebuilt Services"
-   - 搜索并添加 "KVRocks"（或手动添加 Docker 镜像）
+   - 搜索并添加 "KVRocks"（或手动添加 Docker 镜像 `apache/kvrocks`）
    - Zeabur 会自动创建 KVRocks 服务
+   - **记住服务名称**（例如：`apachekvrocks`），稍后配置时需要用到
+   - **配置持久化卷（重要）**：
+     * 点击 KVRocks 服务进入设置页面
+     * 找到 "Volumes" 部分，点击 "Add Volume"
+     * Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
+     * Path: `/data`
+     * 保存配置
 
 4. **配置环境变量**
 
@@ -346,7 +353,7 @@ Zeabur 会自动检测项目中的 Dockerfile 并完成部署。
 
    # 必填：存储配置
    NEXT_PUBLIC_STORAGE_TYPE=kvrocks
-   KVROCKS_URL=redis://${KVROCKS_HOST}:${KVROCKS_PORT}
+   KVROCKS_URL=redis://apachekvrocks:6666
 
    # 可选：站点配置
    SITE_BASE=https://your-domain.zeabur.app
@@ -358,7 +365,10 @@ Zeabur 会自动检测项目中的 Dockerfile 并完成部署。
    NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
    ```
 
-   **注意**：`${KVROCKS_HOST}` 和 `${KVROCKS_PORT}` 会由 Zeabur 自动注入，也可以手动填写 KVRocks 服务的内部连接地址。
+   **注意**：
+   - `KVROCKS_URL` 中的主机名 `apachekvrocks` 是 KVRocks 服务的名称
+   - 如果你的 KVRocks 服务名称不同，请替换为实际的服务名称
+   - **重要**：两个服务必须在同一个 Zeabur Project 中才能互相访问
 
 5. **部署项目**
    - 环境变量配置完成后，Zeabur 会自动开始构建和部署
@@ -385,20 +395,86 @@ Zeabur 会自动检测项目中的 Dockerfile 并完成部署。
    - 点击 "Add Service" > "Docker Images"
    - 输入镜像名称：`apache/kvrocks`
    - 配置端口：`6666` (TCP)
-   - 添加持久化卷：挂载路径 `/var/lib/kvrocks`
+   - **记住服务名称**（通常是 `apachekvrocks`）
+   - **配置持久化卷（重要）**：
+     * 在服务设置中找到 "Volumes" 部分
+     * 点击 "Add Volume" 添加新卷
+     * Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
+     * Path: `/data`
+     * 保存配置
 
-3. **配置环境变量**（同方案一）
+   > 💡 **重要提示**：持久化卷路径必须设置为 `/data`，这样 KVRocks 会自动在该目录创建配置文件和数据库文件。
+
+3. **配置环境变量**
+
+   在 LunaTV 服务的环境变量中添加：
+
+   ```env
+   # 必填：管理员账号
+   USERNAME=admin
+   PASSWORD=your_secure_password
+
+   # 必填：存储配置
+   NEXT_PUBLIC_STORAGE_TYPE=kvrocks
+   KVROCKS_URL=redis://apachekvrocks:6666
+
+   # 可选：站点配置
+   SITE_BASE=https://your-domain.zeabur.app
+   NEXT_PUBLIC_SITE_NAME=LunaTV Enhanced
+   ANNOUNCEMENT=欢迎使用 LunaTV Enhanced Edition
+
+   # 可选：豆瓣代理配置（推荐）
+   NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
+   NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
+   ```
+
+   **注意**：
+   - 使用服务名称作为主机名：`redis://apachekvrocks:6666`
+   - 如果服务名称不同，请替换为实际名称
+   - 两个服务必须在同一个 Project 中
 
 4. **部署完成**
    - Zeabur 会自动拉取镜像并启动服务
    - 等待服务就绪后即可访问
+
+#### 🔄 更新 Docker 镜像（方案二适用）
+
+当 Docker 镜像有新版本发布时，Zeabur 不会自动更新。需要手动触发更新：
+
+**更新步骤：**
+
+1. **进入服务设置**
+   - 点击需要更新的服务（LunaTV 或 KVRocks）
+   - 进入服务详情页面
+   - 切换到 **"Settings"** 标签
+
+2. **更新镜像标签**
+   - 找到 **"Service Image"** 部分
+   - 你会看到两个输入框：镜像名称和标签
+   - 点击标签输入框（第二个输入框），修改或重新输入标签
+   - 例如：将 `latest` 改为 `latest-new` 然后再改回 `latest`（强制刷新）
+   - 保存更改
+
+3. **自动重新部署**
+   - Zeabur 会自动拉取最新镜像并重新部署服务
+   - 如果镜像拉取失败，Zeabur 会提示你重新修改
+
+**镜像标签策略：**
+
+- `ghcr.io/szemeng76/lunatv:latest` - 总是使用最新版本
+- `ghcr.io/szemeng76/lunatv:v1.2.3` - 固定版本（推荐生产环境）
+
+> 💡 **提示**：
+> - 使用 `latest` 标签时，修改标签可以强制 Zeabur 重新拉取镜像
+> - **Restart 按钮不会拉取新镜像**，只会重启现有容器
+> - 方案一（Git 部署）会在 Git 推送时自动更新，无需手动操作
 
 #### ✨ Zeabur 部署优势
 
 - ✅ **自动 HTTPS**：免费 SSL 证书自动配置
 - ✅ **全球 CDN**：自带全球加速
 - ✅ **零配置部署**：自动检测 Dockerfile
-- ✅ **服务发现**：容器间自动互联
+- ✅ **服务发现**：容器间通过服务名称自动互联
 - ✅ **持久化存储**：支持数据卷挂载
 - ✅ **CI/CD 集成**：Git 推送自动部署
 - ✅ **实时日志**：Web 界面查看运行日志
@@ -407,7 +483,8 @@ Zeabur 会自动检测项目中的 Dockerfile 并完成部署。
 
 - **计费模式**：按实际使用的资源计费，免费额度足够小型项目使用
 - **区域选择**：建议选择离用户最近的区域部署
-- **环境变量引用**：使用 `${VARIABLE_NAME}` 语法引用其他服务的环境变量
+- **服务网络**：同一 Project 中的服务通过服务名称互相访问（如 `apachekvrocks:6666`）
+- **持久化存储**：KVRocks 必须配置持久化卷到 `/data` 目录，否则重启后数据丢失
 
 ---
 
