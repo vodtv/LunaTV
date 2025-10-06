@@ -25,7 +25,7 @@
 ![HLS.js](https://img.shields.io/badge/HLS.js-1.6.13-ec407a)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Docker Ready](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
-![Version](https://img.shields.io/badge/Version-5.5.4-orange)
+![Version](https://img.shields.io/badge/Version-5.5.5-orange)
 
 </div>
 
@@ -33,7 +33,7 @@
 
 ## 📢 项目说明
 
-本项目是在 **MoonTV** 基础上进行的深度二次开发版本，从 **v4.3.1** 版本开始，持续迭代至当前 **v5.5.4**，累计新增 50+ 重大功能模块，300+ 细节优化。所有新增功能详见 [CHANGELOG](CHANGELOG)。
+本项目是在 **MoonTV** 基础上进行的深度二次开发版本，从 **v4.3.1** 版本开始，持续迭代至当前 **v5.5.5**，累计新增 50+ 重大功能模块，300+ 细节优化。所有新增功能详见 [CHANGELOG](CHANGELOG)。
 
 ### 💡 核心增强亮点
 
@@ -702,21 +702,26 @@ services:
 
 完整的功能更新和 Bug 修复记录请查看 [CHANGELOG](CHANGELOG)。
 
-### 最新版本：v5.5.4 (2025-10-03)
+### 最新版本：v5.5.5 (2025-10-06)
 
 #### 新增功能
-- 🔐 TVBox 普通用户访问支持
-- 🎨 登录注册界面现代化升级
-- 💾 日历缓存数据库迁移
+- 🎯 TVBox诊断增强：完整诊断详情展示
+- 🔍 Spider管理系统：探测、缓存、降级代理机制
+- 📊 管理统计卡片增强：新剧集和继续观看卡片
+- 🎬 已完结系列徽章：基于vod_remarks的智能检测
+- 📝 双语README和完整文档
 
 #### 优化改进
-- 📊 前端数据库缓存优化
-- 📦 react-window 升级至 v2.2.0
+- ⚡ Spider JAR优化：GitHub raw源优先
+- 🔄 缓存机制优化：内存缓存解决慢加载
+- 🎯 原始集数逻辑改进：recordKey精确匹配
+- 📊 搜索API优先级：remarks优先判断完结状态
 
 #### Bug 修复
-- 🔄 原始集数更新逻辑修复
-- 🗄️ Upstash 对象反序列化支持
-- 🚫 Next.js 动态路由警告消除
+- 🔧 original_episodes更新逻辑完善
+- 💾 缓存更新时序修复
+- 📱 QuotaExceededError修复
+- 🎯 实时数据同步优化
 
 ### 重大里程碑版本
 

@@ -7,8 +7,11 @@
 import crypto from 'crypto';
 
 // Remote jar candidates (order by stability and SSL compatibility)
-// 只保留经过验证可用的源（2025-10-04 测试通过）
+// 经过验证可用的源（2025-10-06 测试通过）
 const CANDIDATES: string[] = [
+  // 国内优化源 #1: raw.iqiq.io CDN (200 OK, 国内访问快)
+  'https://raw.iqiq.io/FongMi/CatVodSpider/main/jar/custom_spider.jar',
+
   // GitHub 可用源 #1: FongMi (283KB, 200 OK)
   'https://raw.githubusercontent.com/FongMi/CatVodSpider/main/jar/custom_spider.jar',
 
@@ -17,6 +20,9 @@ const CANDIDATES: string[] = [
 
   // GitHub 可用源 #3: gaotianliuyun (260KB, 200 OK)
   'https://raw.githubusercontent.com/gaotianliuyun/gao/master/jar/custom_spider.jar',
+
+  // CORS 代理源 (200 OK, 备用)
+  'https://cors.isteed.cc/github.com/FongMi/CatVodSpider/raw/main/jar/custom_spider.jar',
 ];
 
 // 内置稳定 JAR 作为最终 fallback - 提取自实际工作的 spider.jar

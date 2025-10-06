@@ -25,7 +25,7 @@
 ![HLS.js](https://img.shields.io/badge/HLS.js-1.6.13-ec407a)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Docker Ready](https://img.shields.io/badge/Docker-ready-blue?logo=docker)
-![Version](https://img.shields.io/badge/Version-5.5.4-orange)
+![Version](https://img.shields.io/badge/Version-5.5.5-orange)
 
 </div>
 
@@ -33,7 +33,7 @@
 
 ## 📢 Project Overview
 
-This project is a deeply customized version based on **MoonTV**, continuously developed from **v4.3.1** to the current **v5.5.4**, with **50+ major feature modules** and **300+ detailed optimizations** added. See [CHANGELOG](CHANGELOG) for all new features.
+This project is a deeply customized version based on **MoonTV**, continuously developed from **v4.3.1** to the current **v5.5.5**, with **50+ major feature modules** and **300+ detailed optimizations** added. See [CHANGELOG](CHANGELOG) for all new features.
 
 ### 💡 Core Enhancement Highlights
 
@@ -702,21 +702,26 @@ This project works with [OrionTV](https://github.com/zimplexing/OrionTV) on Andr
 
 For complete feature updates and bug fixes, see [CHANGELOG](CHANGELOG).
 
-### Latest Version: v5.5.4 (2025-10-03)
+### Latest Version: v5.5.5 (2025-10-06)
 
 #### Added
-- 🔐 TVBox regular user access support
-- 🎨 Modernized login/register interface
-- 💾 Calendar cache database migration
+- 🎯 TVBox diagnostics enhancement: Complete diagnostic details display
+- 🔍 Spider management system: Probing, caching, fallback proxy mechanism
+- 📊 Admin stats cards enhancement: New episodes and continue watching cards
+- 🎬 Completed series badge: Smart detection based on vod_remarks
+- 📝 Bilingual README and complete documentation
 
 #### Improved
-- 📊 Frontend database cache optimization
-- 📦 Upgraded react-window to v2.2.0
+- ⚡ Spider JAR optimization: GitHub raw source priority
+- 🔄 Cache mechanism optimization: Memory cache solves slow loading
+- 🎯 Original episodes logic improvement: recordKey exact matching
+- 📊 Search API priority: remarks-first completion status detection
 
 #### Fixed
-- 🔄 Fixed original episodes update logic
-- 🗄️ Upstash object deserialization support
-- 🚫 Eliminated Next.js dynamic route warnings
+- 🔧 original_episodes update logic refinement
+- 💾 Cache update timing fix
+- 📱 QuotaExceededError fix
+- 🎯 Real-time data sync optimization
 
 ### Major Milestone Versions
 
