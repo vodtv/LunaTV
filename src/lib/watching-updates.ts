@@ -420,65 +420,11 @@ async function getOriginalEpisodes(record: PlayRecord, videoId: string, recordKe
     return record.original_episodes;
   }
 
-  // 🔧 关键修复：对于旧数据（original_episodes = null），立即同步修复
-  // 🚨 重要：record.total_episodes 可能已经被 checkSingleRecordUpdate 的第 294-310 行更新过
-  // 解决方案：不使用内存中的 record.total_episodes，而是从数据库重新读取原始值
+  // 🔑 如果数据库中也没有 original_episodes，使用当前 total_episodes
+  // 但不要写回数据库！只返回值，让首次保存时自然设置
   if ((record.original_episodes === undefined || record.original_episodes === null) && record.total_episodes > 0) {
-    console.log(`🔧 检测到历史记录缺少原始集数，需要从数据库读取原始值: ${record.title}`);
-
-    // 🔒 防重复修复：检查是否已经在修复中
-    if (!fixingRecords.has(recordKey)) {
-      fixingRecords.add(recordKey);
-
-      try {
-        // 🔑 关键：从数据库重新读取播放记录，获取未被更新的 total_episodes
-        const freshRecordsResponse = await fetch('/api/playrecords');
-        if (!freshRecordsResponse.ok) {
-          throw new Error('无法从数据库读取播放记录');
-        }
-        const freshRecords = await freshRecordsResponse.json();
-        const freshRecord = freshRecords[recordKey];
-
-        if (!freshRecord) {
-          console.warn(`⚠️ 数据库中未找到记录: ${record.title}，使用当前值`);
-          fixingRecords.delete(recordKey);
-          return record.total_episodes;
-        }
-
-        // 使用数据库中的 total_episodes 作为原始集数
-        const originalEpisodesToFix = freshRecord.total_episodes;
-        console.log(`📚 从数据库读取到原始集数: ${record.title} = ${originalEpisodesToFix}集 (内存中已更新为 ${record.total_episodes}集)`);
-
-        // 立即保存原始集数到数据库
-        await fetch('/api/playrecords', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            key: recordKey,
-            record: {
-              ...freshRecord,  // 使用数据库中的完整记录
-              original_episodes: originalEpisodesToFix,  // 设置原始集数
-              save_time: freshRecord.save_time // 保持原有的save_time
-            }
-          })
-        });
-        console.log(`✅ 已同步修复 ${record.title} 的原始集数: ${originalEpisodesToFix}集`);
-
-        // 修复完成后移除标记
-        fixingRecords.delete(recordKey);
-
-        // 返回修复后的值
-        return originalEpisodesToFix;
-      } catch (error) {
-        console.error(`❌ 修复 ${record.title} 原始集数失败:`, error);
-        fixingRecords.delete(recordKey);
-        // 失败时仍然返回当前值，但下次会重试
-        return record.total_episodes;
-      }
-    } else {
-      console.log(`⏳ ${record.title} 原始集数修复正在进行中，使用当前值`);
-      return record.total_episodes;
-    }
+    console.log(`⚠️ ${record.title} 缺少原始集数，使用当前值 ${record.total_episodes}集（不写入数据库）`);
+    return record.total_episodes;
   }
 
   // 如果没有原始集数记录，尝试从localStorage读取（向后兼容）
