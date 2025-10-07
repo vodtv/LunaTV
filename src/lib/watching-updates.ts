@@ -336,24 +336,20 @@ async function checkSingleRecordUpdate(record: PlayRecord, videoId: string, stor
     if (hasUpdate) {
       console.log(`${record.title} 发现新集数: ${originalTotalEpisodes} -> ${latestEpisodes} 集，新增${newEpisodes}集`);
 
-      // 如果检测到新集数，同时更新播放记录的total_episodes
-      if (latestEpisodes > record.total_episodes) {
-        console.log(`🔄 更新播放记录集数: ${record.title} ${record.total_episodes} -> ${latestEpisodes}`);
-        try {
-          // 🔒 关键修复：更新前必须确保 original_episodes 已正确设置
-          // 使用我们已经获取到的 originalTotalEpisodes（来自 getOriginalEpisodes）
-          const updatedRecord: PlayRecord = {
-            ...record,
-            total_episodes: latestEpisodes,
-            // ✅ 使用已经通过 getOriginalEpisodes 获取/修复的原始集数
-            original_episodes: originalTotalEpisodes
-          };
+      // 🔑 关键修复：watching-updates 不应该调用 savePlayRecord 更新播放记录
+      // 因为 savePlayRecord 会触发 checkShouldUpdateOriginalEpisodes，导致 original_episodes 被错误更新
+      //
+      // 正确的更新流程应该是：
+      // 1. watching-updates 只负责检测和显示新集数提醒
+      // 2. 用户下次实际观看时，播放器会自动获取最新的 total_episodes
+      // 3. 只有用户真正观看新集数时，original_episodes 才会被更新
+      //
+      // 因此，这里移除了 savePlayRecord 调用，避免误更新 original_episodes
 
-          await savePlayRecord(storageSourceName || record.source_name, videoId, updatedRecord);
-          console.log(`✅ 播放记录集数更新成功: ${record.title}，original_episodes 保持为 ${updatedRecord.original_episodes}`);
-        } catch (error) {
-          console.error(`❌ 更新播放记录集数失败: ${record.title}`, error);
-        }
+      if (latestEpisodes > record.total_episodes) {
+        console.log(`📊 检测到集数差异: ${record.title} 播放记录${record.total_episodes}集 < API最新${latestEpisodes}集`);
+        console.log(`✅ 已记录新集数信息，等待用户实际观看时自动同步`);
+        // 注意：不调用 savePlayRecord，避免触发 original_episodes 的错误更新
       }
     }
 
