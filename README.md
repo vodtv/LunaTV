@@ -210,6 +210,24 @@
 
 ## 🚀 部署
 
+### ⚡ 一键部署到 Zeabur（最简单）
+
+点击下方按钮即可一键部署，自动配置 LunaTV + Kvrocks 数据库：
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/2425O0/deploy)
+
+**优势**：
+- ✅ 无需配置，一键启动（自动部署完整环境）
+- ✅ 自动 HTTPS 和全球 CDN 加速
+- ✅ 持久化存储，数据永不丢失
+- ✅ 免费额度足够个人使用
+
+点击按钮后填写环境变量即可完成部署！详细说明见下方 [Zeabur 部署指南](#️-zeabur-部署推荐)。
+
+---
+
+### 🐳 Docker 自托管部署
+
 本项目**仅支持 Docker 或其他基于 Docker 的平台**部署（如 Dockge、Portainer、Komodo 等）。
 
 ### 📦 推荐部署方案：Kvrocks 存储
@@ -330,10 +348,10 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
      * 在服务设置中找到 "Volumes" 部分
      * 点击 "Add Volume" 添加新卷
      * Volume ID: `kvrocks-data`（可自定义，仅支持字母、数字、连字符）
-     * Path: `/data`
+     * Path: `/var/lib/kvrocks/db`
      * 保存配置
 
-   > 💡 **重要提示**：持久化卷路径必须设置为 `/data`，这样 KVRocks 会自动在该目录创建配置文件和数据库文件。
+   > 💡 **重要提示**：持久化卷路径必须设置为 `/var/lib/kvrocks/db`（KVRocks 数据目录），这样配置文件保留在容器内，数据库文件持久化，重启后数据不会丢失！
 
 2. **添加 LunaTV 服务**
    - 点击 "Add Service" > "Docker Images"
@@ -379,34 +397,20 @@ Zeabur 是一站式云端部署平台，使用预构建的 Docker 镜像可以�
 
 #### 🔄 更新 Docker 镜像
 
-当 Docker 镜像有新版本发布时，Zeabur 不会自动更新。需要手动触发更新：
+当 Docker 镜像有新版本发布时，Zeabur 不会自动更新。需要手动触发更新。
 
 **更新步骤：**
 
-1. **进入服务设置**
+1. **进入服务页面**
    - 点击需要更新的服务（LunaTV 或 KVRocks）
-   - 进入服务详情页面
-   - 切换到 **"Settings"** 标签
 
-2. **更新镜像标签**
-   - 找到 **"Service Image"** 部分
-   - 你会看到两个输入框：镜像名称和标签
-   - 点击标签输入框（第二个输入框），修改或重新输入标签
-   - 例如：将 `latest` 改为 `latest-new` 然后再改回 `latest`（强制刷新）
-   - 保存更改
-
-3. **自动重新部署**
-   - Zeabur 会自动拉取最新镜像并重新部署服务
-   - 如果镜像拉取失败，Zeabur 会提示你重新修改
-
-**镜像标签策略：**
-
-- `ghcr.io/szemeng76/lunatv:latest` - 总是使用最新版本
-- `ghcr.io/szemeng76/lunatv:v1.2.3` - 固定版本（推荐生产环境）
+2. **重启服务**
+   - 点击右上角的 **"Restart"** 按钮
+   - Zeabur 会自动拉取最新的 `latest` 镜像并重新部署
 
 > 💡 **提示**：
-> - 使用 `latest` 标签时，修改标签可以强制 Zeabur 重新拉取镜像
-> - **Restart 按钮不会拉取新镜像**，只会重启现有容器
+> - 使用 `latest` 标签时，Restart 会自动拉取最新镜像
+> - 生产环境推荐使用固定版本标签（如 `v5.5.5`）避免意外更新
 
 #### ✨ Zeabur 部署优势
 

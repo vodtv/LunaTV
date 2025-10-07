@@ -210,6 +210,24 @@ This project is licensed under **CC BY-NC-SA 4.0**, with the following terms:
 
 ## 🚀 Deployment
 
+### ⚡ One-Click Deploy to Zeabur (Easiest)
+
+Click the button below for one-click deployment, automatically configures LunaTV + Kvrocks database:
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/2425O0/deploy)
+
+**Advantages**:
+- ✅ Zero configuration, instant startup (auto-deploy complete environment)
+- ✅ Automatic HTTPS and global CDN acceleration
+- ✅ Persistent storage, data never lost
+- ✅ Free tier sufficient for personal use
+
+After clicking the button, just fill in the environment variables to complete deployment! See [Zeabur Deployment Guide](#️-zeabur-deployment-recommended) below for details.
+
+---
+
+### 🐳 Docker Self-Hosted Deployment
+
 This project **only supports Docker or Docker-based platforms** (such as Dockge, Portainer, Komodo, etc.).
 
 ### 📦 Recommended: Kvrocks Storage
@@ -330,10 +348,10 @@ Zeabur is a one-stop cloud deployment platform. Using pre-built Docker images al
      * Find "Volumes" section in service settings
      * Click "Add Volume" to add new volume
      * Volume ID: `kvrocks-data` (customizable, only letters, numbers, and hyphens)
-     * Path: `/data`
+     * Path: `/var/lib/kvrocks/db`
      * Save configuration
 
-   > 💡 **Important**: Persistent volume path must be set to `/data`, so KVRocks will automatically create config files and database files in that directory.
+   > 💡 **Important**: Persistent volume path must be set to `/var/lib/kvrocks/db` (KVRocks data directory). This keeps config files in the container while persisting database files, preventing data loss on restart!
 
 2. **Add LunaTV Service**
    - Click "Add Service" > "Docker Images"
@@ -379,34 +397,20 @@ Zeabur is a one-stop cloud deployment platform. Using pre-built Docker images al
 
 #### 🔄 Updating Docker Images
 
-When a new Docker image version is released, Zeabur won't automatically update. Manual trigger is required:
+When a new Docker image version is released, Zeabur won't automatically update. Manual trigger is required.
 
 **Update Steps:**
 
-1. **Enter Service Settings**
+1. **Enter Service Page**
    - Click on the service you want to update (LunaTV or KVRocks)
-   - Enter service detail page
-   - Switch to **"Settings"** tab
 
-2. **Update Image Tag**
-   - Find **"Service Image"** section
-   - You'll see two input fields: image name and tag
-   - Click on the tag input field (second field), modify or re-enter the tag
-   - For example: Change `latest` to `latest-new` then back to `latest` (force refresh)
-   - Save changes
-
-3. **Automatic Redeployment**
-   - Zeabur will automatically pull the latest image and redeploy
-   - If image pull fails, Zeabur will prompt you to modify again
-
-**Image Tag Strategy:**
-
-- `ghcr.io/szemeng76/lunatv:latest` - Always use latest version
-- `ghcr.io/szemeng76/lunatv:v1.2.3` - Fixed version (recommended for production)
+2. **Restart Service**
+   - Click the **"Restart"** button in the top right corner
+   - Zeabur will automatically pull the latest `latest` image and redeploy
 
 > 💡 **Tips**:
-> - When using `latest` tag, modifying the tag forces Zeabur to re-pull the image
-> - **Restart button won't pull new images**, it only restarts the existing container
+> - When using `latest` tag, Restart will automatically pull the latest image
+> - For production environments, it's recommended to use fixed version tags (e.g., `v5.5.5`) to avoid unexpected updates
 
 #### ✨ Zeabur Deployment Advantages
 
