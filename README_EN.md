@@ -87,7 +87,10 @@ This project is a deeply customized version based on **MoonTV**, continuously de
 ### 📦 Project Status
 
 - **Notice**: After deployment, this is an **empty shell project** with **no built-in video sources or live streaming sources**. You need to collect and configure them yourself.
-- **Demo Site**: [https://lunatv.smone.us](https://lunatv.smone.us) for short-term testing. Database is cleaned regularly.
+- **Demo Sites**:
+  - Zeabur Deployment: [https://smonetv.zeabur.app](https://smonetv.zeabur.app)
+  - Vercel Deployment: [https://lunatv.smone.us](https://lunatv.smone.us)
+  - For short-term testing. Database is cleaned regularly.
 
 ### 🚫 Distribution Restrictions
 
@@ -314,84 +317,11 @@ services:
 
 ### ☁️ Zeabur Deployment (Recommended)
 
-Zeabur is a one-stop cloud deployment platform that supports automatic Dockerfile detection and deployment, ideal for users seeking simple deployment workflows.
-
-#### Option 1: Automatic Dockerfile Deployment
-
-Zeabur automatically detects the Dockerfile in your project and completes the deployment.
+Zeabur is a one-stop cloud deployment platform. Using pre-built Docker images allows for quick deployment without waiting for builds.
 
 **Deployment Steps:**
 
-1. **Fork This Project**
-   - Fork this repository to your GitHub account
-
-2. **Connect to Zeabur**
-   - Visit [zeabur.com](https://zeabur.com/)
-   - Login and create a new project
-   - Click "Add Service" > "Git" to import your repository
-
-3. **Add KVRocks Database**
-   - In the same project, click "Add Service" > "Prebuilt Services"
-   - Search and add "KVRocks" (or manually add Docker image `apache/kvrocks`)
-   - Zeabur will automatically create the KVRocks service
-   - **Remember the service name** (e.g., `apachekvrocks`), you'll need it later
-   - **Configure Persistent Volume (Important)**:
-     * Click on KVRocks service to enter settings page
-     * Find "Volumes" section, click "Add Volume"
-     * Volume ID: `kvrocks-data` (customizable, only letters, numbers, and hyphens)
-     * Path: `/data`
-     * Save configuration
-
-4. **Configure Environment Variables**
-
-   Add the following environment variables to your LunaTV service:
-
-   ```env
-   # Required: Admin Account
-   USERNAME=admin
-   PASSWORD=your_secure_password
-
-   # Required: Storage Configuration
-   NEXT_PUBLIC_STORAGE_TYPE=kvrocks
-   KVROCKS_URL=redis://apachekvrocks:6666
-
-   # Optional: Site Configuration
-   SITE_BASE=https://your-domain.zeabur.app
-   NEXT_PUBLIC_SITE_NAME=LunaTV Enhanced
-   ANNOUNCEMENT=Welcome to LunaTV Enhanced Edition
-
-   # Optional: Douban Proxy (Recommended)
-   NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
-   NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
-   ```
-
-   **Note**:
-   - The hostname `apachekvrocks` in `KVROCKS_URL` is the KVRocks service name
-   - Replace with your actual service name if different
-   - **Important**: Both services must be in the same Zeabur Project to communicate
-
-5. **Deploy Project**
-   - After environment variable configuration, Zeabur will automatically start building and deploying
-   - Wait for build to complete (approximately 3-8 minutes)
-   - Access the domain provided by Zeabur
-
-6. **Bind Custom Domain (Optional)**
-   - Click "Domains" in service settings
-   - Add your custom domain
-   - Configure DNS CNAME record to point to the Zeabur-provided domain
-
-#### Option 2: Manual Docker Image Configuration
-
-If you need to use pre-built images, you can deploy directly using prebuilt images.
-
-**Deployment Steps:**
-
-1. **Add LunaTV Service**
-   - Click "Add Service" > "Docker Images"
-   - Enter image name: `ghcr.io/szemeng76/lunatv:latest`
-   - Configure port: `3000` (HTTP)
-
-2. **Add KVRocks Service**
+1. **Add KVRocks Service** (Add database first)
    - Click "Add Service" > "Docker Images"
    - Enter image name: `apache/kvrocks`
    - Configure port: `6666` (TCP)
@@ -404,6 +334,11 @@ If you need to use pre-built images, you can deploy directly using prebuilt imag
      * Save configuration
 
    > 💡 **Important**: Persistent volume path must be set to `/data`, so KVRocks will automatically create config files and database files in that directory.
+
+2. **Add LunaTV Service**
+   - Click "Add Service" > "Docker Images"
+   - Enter image name: `ghcr.io/szemeng76/lunatv:latest`
+   - Configure port: `3000` (HTTP)
 
 3. **Configure Environment Variables**
 
@@ -437,7 +372,12 @@ If you need to use pre-built images, you can deploy directly using prebuilt imag
    - Zeabur will automatically pull images and start services
    - Access the service once it's ready
 
-#### 🔄 Updating Docker Images (Option 2 Only)
+5. **Bind Custom Domain (Optional)**
+   - Click "Domains" in service settings
+   - Add your custom domain
+   - Configure DNS CNAME record to point to the Zeabur-provided domain
+
+#### 🔄 Updating Docker Images
 
 When a new Docker image version is released, Zeabur won't automatically update. Manual trigger is required:
 
@@ -467,7 +407,6 @@ When a new Docker image version is released, Zeabur won't automatically update. 
 > 💡 **Tips**:
 > - When using `latest` tag, modifying the tag forces Zeabur to re-pull the image
 > - **Restart button won't pull new images**, it only restarts the existing container
-> - Option 1 (Git deployment) auto-updates on Git push, no manual operation needed
 
 #### ✨ Zeabur Deployment Advantages
 
