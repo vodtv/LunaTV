@@ -1413,7 +1413,7 @@ const PlayStatsPage: React.FC = () => {
                         .filter(series => series.hasNewEpisode)
                         .map((series, index) => (
                           <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full group/card">
-                            <div className="relative group-hover/card:z-[500] transition-all duration-300 ease-in-out">
+                            <div className="relative group-hover/card:z-[5] transition-all duration-300 ease-in-out">
                               <VideoCard
                                 title={series.title}
                                 poster={series.cover || ''}
@@ -1446,7 +1446,7 @@ const PlayStatsPage: React.FC = () => {
                         .filter(series => series.hasNewEpisode)
                         .map((series, index) => (
                           <div key={`new-${series.title}_${series.year}_${index}`} className="relative w-full group/card">
-                            <div className="relative group-hover/card:z-[500] transition-all duration-300 ease-in-out">
+                            <div className="relative group-hover/card:z-[5] transition-all duration-300 ease-in-out">
                               <VideoCard
                                 title={series.title}
                                 poster={series.cover || ''}
@@ -1496,7 +1496,7 @@ const PlayStatsPage: React.FC = () => {
                         .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
                         .map((series, index) => (
                           <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full group/card">
-                            <div className="relative group-hover/card:z-[500] transition-all duration-300 ease-in-out">
+                            <div className="relative group-hover/card:z-[5] transition-all duration-300 ease-in-out">
                               <VideoCard
                                 title={series.title}
                                 poster={series.cover || ''}
@@ -1529,7 +1529,7 @@ const PlayStatsPage: React.FC = () => {
                         .filter(series => series.hasContinueWatching && !series.hasNewEpisode)
                         .map((series, index) => (
                           <div key={`continue-${series.title}_${series.year}_${index}`} className="relative w-full group/card">
-                            <div className="relative group-hover/card:z-[500] transition-all duration-300 ease-in-out">
+                            <div className="relative group-hover/card:z-[5] transition-all duration-300 ease-in-out">
                               <VideoCard
                                 title={series.title}
                                 poster={series.cover || ''}
