@@ -195,7 +195,13 @@ export default function HeroBanner({
               <span>播放</span>
             </Link>
             <Link
-              href={`/douban?type=${currentItem.type || 'movie'}`}
+              href={
+                currentItem.type === 'shortdrama'
+                  ? '/shortdrama'
+                  : `/douban?type=${
+                      currentItem.type === 'variety' ? 'show' : (currentItem.type || 'movie')
+                    }`
+              }
               className='flex items-center gap-2 px-4 sm:px-5 py-2 bg-white/20 backdrop-blur-sm text-white font-semibold rounded-lg hover:bg-white/30 transition-all transform hover:scale-105 text-sm sm:text-base'
             >
               <Info className='w-4 h-4' />
