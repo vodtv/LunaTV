@@ -3725,10 +3725,12 @@ function PlayPageClient() {
         setCurrentPlayTime(currentTime);
         setVideoDuration(duration);
 
-        // 保存播放进度逻辑 - 优化所有存储类型的保存间隔
+        // 保存播放进度逻辑 - 优化保存间隔以减少网络开销
         const saveNow = Date.now();
-        // upstash需要更长间隔避免频率限制，其他存储类型也适当降低频率减少性能开销
-        const interval = process.env.NEXT_PUBLIC_STORAGE_TYPE === 'upstash' ? 20000 : 10000; // 统一提高到10秒
+        // 🔧 优化：增加播放中的保存间隔，依赖暂停时保存作为主要保存时机
+        // upstash: 60秒兜底保存，其他存储: 30秒兜底保存
+        // 用户暂停、切换集数、页面卸载时会立即保存，因此较长间隔不影响体验
+        const interval = process.env.NEXT_PUBLIC_STORAGE_TYPE === 'upstash' ? 60000 : 30000;
 
         // 🔥 关键修复：如果当前播放位置接近视频结尾（最后3分钟），不保存进度
         // 这是为了避免自动跳过片尾时保存了片尾位置的进度，导致"继续观看"从错误位置开始
@@ -4641,12 +4643,17 @@ function PlayPageClient() {
       {/* 返回顶部悬浮按钮 */}
       <button
         onClick={scrollToTop}
-        className={`fixed bottom-6 right-6 z-[500] w-12 h-12 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out flex items-center justify-center group relative overflow-hidden ${
+        className={`fixed z-[500] w-12 h-12 rounded-full shadow-lg backdrop-blur-sm transition-all duration-300 ease-in-out flex items-center justify-center group relative overflow-hidden ${
           showBackToTop
             ? 'opacity-100 translate-y-0 pointer-events-auto'
             : 'opacity-0 translate-y-4 pointer-events-none'
         }`}
-        style={{ position: 'fixed', right: '1.5rem', bottom: '1.5rem', left: 'auto' }}
+        style={{
+          position: 'fixed',
+          right: '1.5rem',
+          bottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '5rem' : '1.5rem',
+          left: 'auto'
+        }}
         aria-label='返回顶部'
       >
         {/* 渐变背景 */}
