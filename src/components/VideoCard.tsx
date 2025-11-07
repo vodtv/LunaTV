@@ -646,11 +646,13 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
             src={processImageUrl(actualPoster)}
             alt={actualTitle}
             fill
+            sizes="(max-width: 640px) 33vw, (max-width: 768px) 25vw, (max-width: 1024px) 20vw, 16vw"
             className={`${origin === 'live' ? 'object-contain' : 'object-cover'} transition-all duration-700 ease-out ${
               imageLoaded ? 'opacity-100 blur-0 scale-100' : 'opacity-0 blur-md scale-105'
             }`}
             referrerPolicy='no-referrer'
             loading='lazy'
+            quality={85}
             onLoadingComplete={() => {
               setIsLoading(true);
               setImageLoaded(true);
@@ -817,7 +819,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
 
           {/* 集数徽章 - 左上角第二位（如果有类型徽章，则向下偏移）*/}
           {/* 即将上映的内容不显示集数徽章（因为是占位符数据）*/}
-          {actualEpisodes && actualEpisodes > 1 && !isUpcoming && (
+          {/* 收藏页面：过滤掉99集的占位符显示，只显示真实集数 */}
+          {actualEpisodes && actualEpisodes > 1 && !isUpcoming && !(from === 'favorite' && actualEpisodes === 99) && (
             <div
               className={`absolute left-2 bg-gradient-to-br from-emerald-500/95 via-teal-500/95 to-cyan-600/95 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ring-2 ring-white/30 transition-all duration-300 ease-out group-hover:scale-105 group-hover:shadow-emerald-500/60 group-hover:ring-emerald-300/50 z-30 ${
                 remarks && remarks.includes('天后上映') && type ? 'top-[48px]' : 'top-2'
