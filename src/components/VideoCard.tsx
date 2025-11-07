@@ -130,7 +130,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
     : type;
 
   // 判断是否为即将上映（未发布的内容）
-  const isUpcoming = remarks && remarks.includes('天后上映');
+  const isUpcoming = remarks && (remarks.includes('天后上映') || remarks.includes('已上映') || remarks.includes('今日上映'));
 
   // 获取收藏状态（搜索结果页面不检查，但即将上映需要检查）
   useEffect(() => {
@@ -793,7 +793,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
           )}
 
           {/* 类型徽章 - 左上角第一位（电影/电视剧）*/}
-          {remarks && remarks.includes('天后上映') && type && (
+          {remarks && (remarks.includes('天后上映') || remarks.includes('已上映') || remarks.includes('今日上映')) && type && (
             <div
               className={`absolute top-2 left-2 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ring-2 ring-white/30 transition-all duration-300 ease-out group-hover:scale-105 z-30 ${
                 type === 'movie'
@@ -899,8 +899,8 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
             </div>
           )}
 
-          {/* 即将上映徽章 - 美化版，放在底部左侧 */}
-          {remarks && remarks.includes('天后上映') && (
+          {/* 上映状态徽章 - 美化版，放在底部左侧 */}
+          {remarks && (remarks.includes('天后上映') || remarks.includes('已上映') || remarks.includes('今日上映')) && (
             <div
               className="absolute bottom-2 left-2 bg-gradient-to-br from-orange-500/95 via-red-500/95 to-pink-600/95 backdrop-blur-md text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ring-2 ring-white/30 transition-all duration-300 ease-out group-hover:scale-105 group-hover:shadow-orange-500/60 group-hover:ring-orange-300/50 animate-pulse"
               style={{
