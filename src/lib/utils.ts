@@ -83,7 +83,17 @@ function getDoubanImageProxyConfig(): {
     const storedType = localStorage.getItem('doubanImageProxyType');
     const runtimeType = (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY_TYPE;
 
-    doubanImageProxyType = (storedType || runtimeType || 'server') as 'direct' | 'server' | 'img3' | 'cmliussss-cdn-tencent' | 'cmliussss-cdn-ali' | 'custom';
+    // 自动修复：如果localStorage或RUNTIME_CONFIG是'direct'，自动改为'server'
+    let effectiveStoredType = storedType;
+    if (storedType === 'direct') {
+      effectiveStoredType = 'server';
+      // 自动更新localStorage，避免下次还是'direct'
+      localStorage.setItem('doubanImageProxyType', 'server');
+    }
+
+    const effectiveRuntimeType = (runtimeType === 'direct') ? 'server' : runtimeType;
+
+    doubanImageProxyType = (effectiveStoredType || effectiveRuntimeType || 'server') as 'direct' | 'server' | 'img3' | 'cmliussss-cdn-tencent' | 'cmliussss-cdn-ali' | 'custom';
     doubanImageProxy =
       localStorage.getItem('doubanImageProxyUrl') ||
       (window as any).RUNTIME_CONFIG?.DOUBAN_IMAGE_PROXY ||
