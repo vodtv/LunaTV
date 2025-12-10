@@ -148,11 +148,14 @@ function HomeClient() {
     currentEpisode?: number;
     search_title?: string;
     origin?: 'vod' | 'live';
+    type?: string;
     releaseDate?: string;
     remarks?: string;
   };
 
   const [favoriteItems, setFavoriteItems] = useState<FavoriteItem[]>([]);
+  const [favoriteFilter, setFavoriteFilter] = useState<'all' | 'movie' | 'tv' | 'shortdrama' | 'live' | 'variety'>('all');
+  const [favoriteSortBy, setFavoriteSortBy] = useState<'recent' | 'title' | 'rating'>('recent');
 
   useEffect(() => {
     // 清理过期缓存
@@ -620,6 +623,7 @@ function HomeClient() {
           currentEpisode,
           search_title: fav?.search_title,
           origin: fav?.origin,
+          type: fav?.type,
           releaseDate: fav?.releaseDate,
           remarks: fav?.remarks,
         } as FavoriteItem;
@@ -732,24 +736,144 @@ function HomeClient() {
           {activeTab === 'favorites' ? (
             // 收藏夹视图
             <section className='mb-8'>
-              <div className='mb-4 flex items-center justify-between'>
+              <div className='mb-6 flex items-center justify-between'>
                 <h2 className='text-xl font-bold text-gray-800 dark:text-gray-200'>
                   我的收藏
                 </h2>
                 {favoriteItems.length > 0 && (
                   <button
-                    className='text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    className='text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors'
                     onClick={async () => {
-                      await clearAllFavorites();
-                      setFavoriteItems([]);
+                      if (confirm('确定要清空所有收藏吗？')) {
+                        await clearAllFavorites();
+                        setFavoriteItems([]);
+                      }
                     }}
                   >
-                    清空
+                    清空收藏
                   </button>
                 )}
               </div>
+
+              {/* 统计信息 */}
+              {favoriteItems.length > 0 && (() => {
+                const stats = {
+                  total: favoriteItems.length,
+                  movie: favoriteItems.filter(item => item.origin === 'vod' && item.episodes === 1 && item.type !== 'variety').length,
+                  tv: favoriteItems.filter(item => item.origin === 'vod' && item.episodes > 1 && item.type !== 'variety').length,
+                  shortdrama: favoriteItems.filter(item => item.origin === 'shortdrama' || item.source === 'shortdrama').length,
+                  live: favoriteItems.filter(item => item.origin === 'live').length,
+                  variety: favoriteItems.filter(item => item.type === 'variety').length,
+                };
+                return (
+                  <div className='mb-4 flex flex-wrap gap-2 text-sm text-gray-600 dark:text-gray-400'>
+                    <span className='px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full'>
+                      共 <strong className='text-gray-900 dark:text-gray-100'>{stats.total}</strong> 项
+                    </span>
+                    {stats.movie > 0 && (
+                      <span className='px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full'>
+                        电影 {stats.movie}
+                      </span>
+                    )}
+                    {stats.tv > 0 && (
+                      <span className='px-3 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-full'>
+                        剧集 {stats.tv}
+                      </span>
+                    )}
+                    {stats.shortdrama > 0 && (
+                      <span className='px-3 py-1 bg-pink-50 dark:bg-pink-900/20 text-pink-700 dark:text-pink-300 rounded-full'>
+                        短剧 {stats.shortdrama}
+                      </span>
+                    )}
+                    {stats.live > 0 && (
+                      <span className='px-3 py-1 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-full'>
+                        直播 {stats.live}
+                      </span>
+                    )}
+                    {stats.variety > 0 && (
+                      <span className='px-3 py-1 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-full'>
+                        综艺 {stats.variety}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 筛选标签 */}
+              {favoriteItems.length > 0 && (
+                <div className='mb-4 flex flex-wrap gap-2'>
+                  {[
+                    { key: 'all' as const, label: '全部', icon: '📚' },
+                    { key: 'movie' as const, label: '电影', icon: '🎬' },
+                    { key: 'tv' as const, label: '剧集', icon: '📺' },
+                    { key: 'shortdrama' as const, label: '短剧', icon: '🎭' },
+                    { key: 'live' as const, label: '直播', icon: '📡' },
+                    { key: 'variety' as const, label: '综艺', icon: '🎪' },
+                  ].map(({ key, label, icon }) => (
+                    <button
+                      key={key}
+                      onClick={() => setFavoriteFilter(key)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        favoriteFilter === key
+                          ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg scale-105'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      <span className='mr-1'>{icon}</span>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* 排序选项 */}
+              {favoriteItems.length > 0 && (
+                <div className='mb-4 flex items-center gap-2 text-sm'>
+                  <span className='text-gray-600 dark:text-gray-400'>排序：</span>
+                  <div className='flex gap-2'>
+                    {[
+                      { key: 'recent' as const, label: '最近添加' },
+                      { key: 'title' as const, label: '标题 A-Z' },
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => setFavoriteSortBy(key)}
+                        className={`px-3 py-1 rounded-md transition-colors ${
+                          favoriteSortBy === key
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className='justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'>
-                {favoriteItems.map((item) => {
+                {(() => {
+                  // 筛选
+                  let filtered = favoriteItems;
+                  if (favoriteFilter === 'movie') {
+                    filtered = favoriteItems.filter(item => item.origin === 'vod' && item.episodes === 1 && item.type !== 'variety');
+                  } else if (favoriteFilter === 'tv') {
+                    filtered = favoriteItems.filter(item => item.origin === 'vod' && item.episodes > 1 && item.type !== 'variety');
+                  } else if (favoriteFilter === 'shortdrama') {
+                    filtered = favoriteItems.filter(item => item.origin === 'shortdrama' || item.source === 'shortdrama');
+                  } else if (favoriteFilter === 'live') {
+                    filtered = favoriteItems.filter(item => item.origin === 'live');
+                  } else if (favoriteFilter === 'variety') {
+                    filtered = favoriteItems.filter(item => item.type === 'variety');
+                  }
+
+                  // 排序
+                  if (favoriteSortBy === 'title') {
+                    filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'));
+                  }
+                  // 'recent' 已经在 updateFavoriteItems 中按 save_time 排序了
+
+                  return filtered.map((item) => {
                   // 智能计算即将上映状态
                   let calculatedRemarks = item.remarks;
 
@@ -780,7 +904,7 @@ function HomeClient() {
                       />
                     </div>
                   );
-                })}
+                })})()}
                 {favoriteItems.length === 0 && (
                   <div className='col-span-full flex flex-col items-center justify-center py-16 px-4'>
                     {/* SVG 插画 - 空收藏夹 */}
@@ -1032,6 +1156,7 @@ function HomeClient() {
                           douban_id={Number(show.id)}
                           rate={show.rate}
                           year={show.year}
+                          type='variety'
                         />
                       </div>
                     ))}
@@ -1141,6 +1266,7 @@ function HomeClient() {
                           douban_id={Number(show.id)}
                           rate={show.rate}
                           year={show.year}
+                          type='variety'
                         />
                       </div>
                     ))}
