@@ -60,6 +60,7 @@ import YouTubeConfig from '@/components/YouTubeConfig';
 import ShortDramaConfig from '@/components/ShortDramaConfig';
 import DownloadConfig from '@/components/OfflineDownloadConfig';
 import CustomAdFilterConfig from '@/components/CustomAdFilterConfig';
+import WatchRoomConfig from '@/components/WatchRoomConfig';
 import PageLayout from '@/components/PageLayout';
 
 // 统一按钮样式系统
@@ -5780,6 +5781,7 @@ function AdminPageClient() {
     shortDramaConfig: false,
     downloadConfig: false,
     customAdFilter: false,
+    watchRoomConfig: false,
     tvboxSecurityConfig: false,
     telegramAuthConfig: false,
     configFile: false,
@@ -6087,6 +6089,21 @@ function AdminPageClient() {
               onToggle={() => toggleTab('customAdFilter')}
             >
               <CustomAdFilterConfig config={config} refreshConfig={fetchConfig} />
+            </CollapsibleTab>
+
+            {/* 观影室配置标签 */}
+            <CollapsibleTab
+              title='观影室配置'
+              icon={
+                <Users
+                  size={20}
+                  className='text-indigo-600 dark:text-indigo-400'
+                />
+              }
+              isExpanded={expandedTabs.watchRoomConfig}
+              onToggle={() => toggleTab('watchRoomConfig')}
+            >
+              <WatchRoomConfig config={config} refreshConfig={fetchConfig} />
             </CollapsibleTab>
 
             {/* TVBox安全配置标签 */}
