@@ -261,9 +261,13 @@ export function useWatchRoom(options: UseWatchRoomOptions): UseWatchRoomReturn {
       return { success: false, error: '未连接到服务器' };
     }
 
+    console.log('[WatchRoom] Joining room with userName:', userName);
+
     return new Promise<{ success: boolean; room?: Room; members?: Member[]; error?: string }>((resolve) => {
       socket.emit('room:join', { roomId, password, userName }, (response) => {
+        console.log('[WatchRoom] Join room response:', response);
         if (response.success && response.room && response.members) {
+          console.log('[WatchRoom] Members received:', response.members);
           // 立即更新状态
           setCurrentRoom(response.room);
           setMembers(response.members);
@@ -302,6 +306,8 @@ export function useWatchRoom(options: UseWatchRoomOptions): UseWatchRoomReturn {
   const updatePlayState = useCallback((state: PlayState) => {
     if (socket && connected) {
       socket.emit('play:update', state);
+      // 本地也更新 currentState（因为服务器不会广播回给发送者）
+      setCurrentRoom((prev) => prev ? { ...prev, currentState: state } : null);
     }
   }, [socket, connected]);
 
@@ -326,6 +332,8 @@ export function useWatchRoom(options: UseWatchRoomOptions): UseWatchRoomReturn {
   const changeVideo = useCallback((state: PlayState) => {
     if (socket && connected) {
       socket.emit('play:change', state);
+      // 本地也更新 currentState（因为服务器不会广播回给发送者）
+      setCurrentRoom((prev) => prev ? { ...prev, currentState: state } : null);
     }
   }, [socket, connected]);
 

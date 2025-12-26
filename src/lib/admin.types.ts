@@ -78,6 +78,19 @@ export interface AdminConfig {
     timeout: number;                     // 请求超时时间(秒)
     enabledCloudTypes: string[];         // 启用的网盘类型
   };
+  NetDiskShareConfig?: {
+    aliyundrive?: {
+      enabled: boolean;                  // 是否启用阿里云盘分享解析
+      refreshToken: string;              // 阿里云盘RefreshToken
+      accessToken?: string;              // AccessToken（自动获取）
+      tokenExpireTime?: number;          // Token过期时间
+    };
+    pikpak?: {
+      enabled: boolean;                  // 是否启用PikPak分享解析
+      username?: string;                 // PikPak账号（可选）
+      password?: string;                 // PikPak密码（可选）
+    };
+  };
   AIRecommendConfig?: {
     enabled: boolean;                    // 是否启用AI推荐功能
     apiUrl: string;                      // OpenAI兼容API地址
