@@ -239,7 +239,7 @@ export function OIDCAuthConfig({ config, providers = [], onSave, onSaveProviders
           {localProviders.length === 0 && localConfig.enabled && (
             <div className='bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4'>
               <div className='flex gap-3'>
-                <AlertCircle className='w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5' />
+                <AlertCircle className='w-5 h-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5' />
                 <div className='flex-1'>
                   <p className='text-sm text-yellow-800 dark:text-yellow-200 font-semibold'>检测到旧版单 Provider 配置</p>
                   <p className='text-sm text-yellow-700 dark:text-yellow-300 mt-1'>
@@ -314,7 +314,7 @@ export function OIDCAuthConfig({ config, providers = [], onSave, onSaveProviders
       {/* 配置提示 */}
       <div className='bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 md:p-4'>
         <div className='flex gap-2 md:gap-3'>
-          <AlertCircle className='w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5' />
+          <AlertCircle className='w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5' />
           <div className='text-xs md:text-sm text-blue-800 dark:text-blue-200 space-y-2 overflow-x-auto'>
             <p className='font-semibold'>常见 OIDC 提供商：</p>
             <ul className='list-disc list-inside space-y-1 ml-2'>
@@ -347,7 +347,7 @@ export function OIDCAuthConfig({ config, providers = [], onSave, onSaveProviders
         <button
           type='button'
           onClick={() => setLocalConfig({ ...localConfig, enabled: !localConfig.enabled })}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
             localConfig.enabled ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
           }`}
         >
@@ -372,7 +372,7 @@ export function OIDCAuthConfig({ config, providers = [], onSave, onSaveProviders
         <button
           type='button'
           onClick={() => setLocalConfig({ ...localConfig, enableRegistration: !localConfig.enableRegistration })}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
             localConfig.enableRegistration ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
           }`}
         >
@@ -677,7 +677,7 @@ function ProviderEditModal({
         {/* 模态框内容 */}
         <div className='relative bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-xl shadow-2xl w-full md:w-auto md:min-w-[600px] md:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden'>
         {/* Header - Fixed */}
-        <div className='flex items-center justify-between p-4 md:p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0'>
+        <div className='flex items-center justify-between p-4 md:p-6 border-b border-gray-200 dark:border-gray-700 shrink-0'>
           <h3 className='text-lg md:text-xl font-semibold text-gray-900 dark:text-gray-100'>
             {provider.name === '新 Provider' ? '添加 Provider' : '编辑 Provider'}
           </h3>
@@ -753,7 +753,7 @@ function ProviderEditModal({
             <button
               type='button'
               onClick={() => setLocalProvider({ ...localProvider, enabled: !localProvider.enabled })}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                 localProvider.enabled ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
               }`}
             >
@@ -774,7 +774,7 @@ function ProviderEditModal({
             <button
               type='button'
               onClick={() => setLocalProvider({ ...localProvider, enableRegistration: !localProvider.enableRegistration })}
-              className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                 localProvider.enableRegistration ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'
               }`}
             >
@@ -906,6 +906,37 @@ function ProviderEditModal({
             />
           </div>
 
+          {/* Redirect URI 显示 - 新增 */}
+          <div>
+            <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
+              Redirect URI（回调地址）
+            </label>
+            <div className='relative'>
+              <input
+                type='text'
+                readOnly
+                value={typeof window !== 'undefined' ? `${window.location.origin}/api/auth/oidc/callback` : ''}
+                className='w-full px-3 py-2 pr-16 sm:pr-20 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-xs sm:text-sm cursor-default'
+              />
+              <button
+                type='button'
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    navigator.clipboard.writeText(`${window.location.origin}/api/auth/oidc/callback`);
+                    setMessage({ type: 'success', text: '已复制到剪贴板' });
+                    setTimeout(() => setMessage(null), 2000);
+                  }
+                }}
+                className='absolute right-2 top-1/2 -translate-y-1/2 px-2 sm:px-3 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors'
+              >
+                复制
+              </button>
+            </div>
+            <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
+              请在 OIDC 提供商的应用配置中添加此地址作为允许的重定向 URI
+            </p>
+          </div>
+
           {/* Button Text */}
           <div>
             <label className='block text-sm font-medium text-gray-900 dark:text-gray-100 mb-2'>
@@ -970,7 +1001,7 @@ function ProviderEditModal({
         </div>
 
         {/* Footer - Fixed */}
-        <div className='flex gap-3 p-4 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0'>
+        <div className='flex gap-3 p-4 md:p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 shrink-0'>
           <button
             onClick={onCancel}
             className='flex-1 px-4 md:px-6 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 rounded-lg font-medium transition-colors'
