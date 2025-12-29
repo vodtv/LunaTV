@@ -397,14 +397,9 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const scrollTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isSyncingRef = useRef(false); // 🔥 防止循环更新的标志
 
-  // ✨ React 19: useOptimistic for optimistic UI updates
-  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
-    messages,
-    (state, newMessage: ExtendedAIMessage) => [...state, newMessage]
-  );
-
-  // ✨ React 19: useTransition for non-urgent updates
+  // ✨ React 19: useTransition for non-urgent updates (流式聊天不需要useOptimistic)
   const [isPending, startTransition] = useTransition();
 
   // ⚡ 优化：防抖滚动到底部
@@ -413,8 +408,13 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
       clearTimeout(scrollTimerRef.current);
     }
     scrollTimerRef.current = setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+      // 使用 scrollTop 直接滚动到底部，更可靠
+      if (messagesContainerRef.current) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      }
+      // 备用方案：使用 scrollIntoView
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 50); // 减少延迟到 50ms 提高响应速度
   }, []);
 
   // ⚡ 优化：异步保存到 localStorage
@@ -445,6 +445,14 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
               timestamp: existingTimestamp
             };
             localStorage.setItem('ai-recommend-messages', JSON.stringify(cache));
+
+            // 🔥 手动派发 storage 事件，同步同一页面内的其他组件实例
+            window.dispatchEvent(new StorageEvent('storage', {
+              key: 'ai-recommend-messages',
+              newValue: JSON.stringify(cache),
+              url: window.location.href,
+              storageArea: localStorage,
+            }));
           } catch (error) {
             console.error("Failed to save messages to cache", error);
           }
@@ -470,6 +478,14 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
               timestamp: existingTimestamp
             };
             localStorage.setItem('ai-recommend-messages', JSON.stringify(cache));
+
+            // 🔥 手动派发 storage 事件，同步同一页面内的其他组件实例
+            window.dispatchEvent(new StorageEvent('storage', {
+              key: 'ai-recommend-messages',
+              newValue: JSON.stringify(cache),
+              url: window.location.href,
+              storageArea: localStorage,
+            }));
           } catch (error) {
             console.error("Failed to save messages to cache", error);
           }
@@ -549,9 +565,55 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
     }
   }, []);
 
+  // 🔥 监听 storage 事件，同步其他组件实例的更新
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      // 🚫 防止循环：如果正在同步中，忽略此次事件
+      if (isSyncingRef.current) return;
+
+      if (e.key === 'ai-recommend-messages' && e.newValue) {
+        try {
+          const { messages: updatedMessages, timestamp } = JSON.parse(e.newValue);
+          const now = new Date().getTime();
+
+          // 检查缓存是否有效（30分钟内）
+          if (now - timestamp < 30 * 60 * 1000) {
+            console.log('🔄 检测到其他组件实例更新，同步聊天记录');
+
+            // 🔥 设置同步标志，防止触发保存
+            isSyncingRef.current = true;
+
+            setMessages(updatedMessages.map((msg: ExtendedAIMessage) => ({
+              ...msg,
+              timestamp: msg.timestamp || new Date().toISOString()
+            })));
+
+            // 🔥 延迟重置标志，确保保存逻辑不会立即触发
+            setTimeout(() => {
+              isSyncingRef.current = false;
+            }, 500);
+          }
+        } catch (error) {
+          console.error('同步聊天记录失败:', error);
+          isSyncingRef.current = false;
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // ⚡ 优化：保存对话到localStorage并滚动到底部
   useEffect(() => {
     scrollToBottom();
+
+    // 🚫 如果正在同步，跳过保存（避免循环）
+    if (isSyncingRef.current) {
+      console.log('⏭️ 跳过保存（正在同步中）');
+      return;
+    }
+
     saveMessagesToStorage(messages);
   }, [messages, scrollToBottom, saveMessagesToStorage]);
 
@@ -579,7 +641,7 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
     }
   }, []);
 
-  // ✨ Optimized sendMessage with useOptimistic and useTransition
+  // ✨ Optimized sendMessage with useState (不使用useOptimistic，直接更新state以确保流式响应立即显示)
   const sendMessage = async (content: string) => {
     if (!content.trim() || isPending) return;
 
@@ -589,25 +651,23 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
       timestamp: new Date().toISOString(),
     };
 
-    // Optimistically add user message
-    addOptimisticMessage(userMessage);
-    setInputMessage('');
-    setError(null);
-
     // Add a temporary "AI is thinking" message
     const thinkingMessage: ExtendedAIMessage = {
       role: 'assistant',
       content: '思考中...',
       timestamp: new Date().toISOString(),
     };
-    addOptimisticMessage(thinkingMessage);
+
+    setInputMessage('');
+    setError(null);
+
+    // 🔥 立即同步更新state（不使用optimistic，确保用户消息和思考中立即显示）
+    const updatedMessages = [...messages, userMessage];
+    const messagesWithThinking = [...updatedMessages, thinkingMessage];
+    setMessages(messagesWithThinking);
 
     startTransition(async () => {
       try {
-        // Actually add user message to state
-        const updatedMessages = [...messages, userMessage];
-        setMessages(updatedMessages);
-
         // 智能上下文管理：只发送最近8条消息（4轮对话）
         const conversationHistory = updatedMessages.slice(-8);
 
@@ -639,9 +699,13 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
           const lines = content.split('\n');
 
           // 支持多种格式：
-          // 1. 《片名》（2023）或《片名》(2023)
-          // 2. 数字序号开头：1. 《片名》（2023）
-          const titlePattern = /(?:\d+\.\s*)?《([^》]+)》\s*[（(](\d{4})[)）]/;
+          // 1. 《片名》（2023） - 带中文括号年份
+          // 2. 《片名》 - 不带年份
+          // 3. 1. 类型：《片名》(English Title) - 带类别前缀和英文名
+          // 4. 1. 《片名》 - 数字序号
+
+          // 匹配《》中的内容，允许前面有任意文本（类别、序号等）
+          const titlePattern = /《([^》]+)》/;
 
           for (let i = 0; i < lines.length; i++) {
             if (recommendations.length >= 4) break;
@@ -651,19 +715,36 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
 
             if (match) {
               const title = match[1].trim();
-              const year = match[2].trim();
-
-              // 尝试提取后续行的类型和推荐理由
+              let year = '';
               let genre = '';
-              let description = 'AI推荐影片';
+              let description = 'AI推荐内容';
 
-              // 查找后续行的"类型："
+              // 尝试从同一行提取年份（中文括号优先）
+              const yearMatchCN = line.match(/《[^》]+》\s*（(\d{4})）/);
+              const yearMatchEN = line.match(/《[^》]+》\s*\((\d{4})\)/);
+
+              if (yearMatchCN) {
+                year = yearMatchCN[1];
+              } else if (yearMatchEN) {
+                year = yearMatchEN[1];
+              }
+
+              // 尝试从同一行提取类型（在《》之前的部分）
+              const genreMatch = line.match(/(?:\d+\.\s*)?([^：:《]+)[：:]\s*《/);
+              if (genreMatch) {
+                genre = genreMatch[1].trim();
+              }
+
+              // 查找后续行的"类型："或"推荐理由："
               for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
                 const nextLine = lines[j];
                 if (nextLine.includes('类型：') || nextLine.includes('类型:')) {
-                  genre = nextLine.split(/类型[：:]/)[1]?.trim() || '';
-                } else if (nextLine.includes('推荐理由：') || nextLine.includes('推荐理由:')) {
-                  description = nextLine.split(/推荐理由[：:]/)[1]?.trim() || description;
+                  const extractedGenre = nextLine.split(/类型[：:]/)[1]?.trim();
+                  if (extractedGenre && !genre) {
+                    genre = extractedGenre;
+                  }
+                } else if (nextLine.includes('推荐理由：') || nextLine.includes('推荐理由:') || nextLine.includes('理由：') || nextLine.includes('理由:')) {
+                  description = nextLine.split(/(?:推荐)?理由[：:]/)[1]?.trim() || description;
                   break;
                 }
               }
@@ -750,7 +831,13 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
 
     const welcomeMessage: ExtendedAIMessage = {
       role: 'assistant',
-      content: '你好！我是AI智能助手，支持以下功能：\n\n🎬 影视剧推荐 - 推荐电影、电视剧、动漫等\n🔗 视频链接解析 - 解析YouTube链接并播放\n📺 视频内容搜索 - 搜索相关视频内容\n\n💡 直接告诉我你想看什么类型的内容，或发送YouTube链接给我解析！',
+      content: `你好！我是 **AI 智能助手**，支持以下功能：
+
+- 🎬 **影视剧推荐** - 推荐电影、电视剧、动漫等
+- 🔗 **视频链接解析** - 解析 YouTube 链接并播放
+- 📺 **视频内容搜索** - 搜索相关视频内容
+
+💡 **提示**：直接告诉我你想看什么类型的内容，或发送 YouTube 链接给我解析！`,
       timestamp: new Date().toISOString()
     };
     setMessages([welcomeMessage]);
@@ -798,12 +885,12 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
           </div>
         </div>
 
-        {/* 消息区域 - 使用 optimisticMessages */}
+        {/* 消息区域 - 直接使用 messages state */}
         <div
           ref={messagesContainerRef}
           className="flex-1 overflow-y-auto p-4 space-y-4 bg-linear-to-b from-gray-50 to-gray-100/50 dark:from-gray-800 dark:to-gray-900/50"
         >
-          {optimisticMessages.length <= 1 && optimisticMessages.every(msg => msg.role === 'assistant' && msg.content.includes('AI智能助手')) && (
+          {messages.length <= 1 && messages.every(msg => msg.role === 'assistant' && (msg.content.includes('AI智能助手') || msg.content.includes('AI 智能助手'))) && (
             <div className="text-center py-8">
               <div className="inline-flex items-center justify-center w-16 h-16 bg-linear-to-br from-blue-500 to-purple-600 rounded-full mb-4">
                 <Sparkles className="h-8 w-8 text-white" />
@@ -834,7 +921,7 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
           )}
 
           {/* ⚡ 优化：使用记忆化的消息组件 */}
-          {optimisticMessages.map((message, index) => (
+          {messages.map((message, index) => (
             <MessageItem
               key={index}
               message={message}
@@ -849,7 +936,7 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
           ))}
 
           {/* 加载状态 - 使用 isPending */}
-          {isPending && optimisticMessages[optimisticMessages.length - 1]?.content !== '思考中...' && (
+          {isPending && messages[messages.length - 1]?.content !== '思考中...' && (
             <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
               <div className="bg-white dark:bg-gray-700 p-3 rounded-xl border border-gray-200/50 dark:border-gray-600/50 shadow-sm">
                 <div className="flex space-x-1.5">
@@ -904,7 +991,7 @@ export default function AIRecommendModal({ isOpen, onClose, context, welcomeMess
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="输入影视推荐类型、YouTube搜索内容或直接粘贴YouTube链接..."
-                className="w-full p-3 border border-gray-300/50 dark:border-gray-600/50 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white dark:focus:bg-gray-750 resize-none transition-all duration-200 shadow-sm"
+                className="w-full p-3 border border-gray-300/50 dark:border-gray-600/50 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-gray-50 dark:focus:bg-gray-800 resize-none transition-all duration-200 shadow-sm"
                 rows={2}
                 disabled={isPending}
               />
