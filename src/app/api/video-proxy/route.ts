@@ -77,9 +77,9 @@ export async function GET(request: Request) {
     if (contentRange) headers.set('Content-Range', contentRange);
     if (acceptRanges) headers.set('Accept-Ranges', acceptRanges);
 
-    // 设置缓存头（视频缓存1小时，避免URL过期导致的问题）
-    headers.set('Cache-Control', 'public, max-age=3600');
-    headers.set('CDN-Cache-Control', 'public, s-maxage=3600');
+    // 设置缓存头（视频缓存4小时）
+    headers.set('Cache-Control', 'public, max-age=14400');
+    headers.set('CDN-Cache-Control', 'public, s-maxage=14400');
 
     // 添加 CORS 支持
     headers.set('Access-Control-Allow-Origin', '*');

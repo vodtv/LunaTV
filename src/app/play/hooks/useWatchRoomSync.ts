@@ -171,6 +171,13 @@ export function useWatchRoomSync({
 
       // 使用 router.push 而不是 window.location.href，保持 WebSocket 连接
       router.push(url);
+
+      // 关键修复：在 push 后延迟调用 refresh，确保数据重新加载
+      // 参考：https://github.com/vercel/next.js/issues/54766
+      setTimeout(() => {
+        router.refresh();
+        console.log('[PlaySync] Called router.refresh() to reload data');
+      }, 100);
     }
   }, [videoTitle, videoYear, currentSource, episodeIndex, setCurrentEpisodeIndex, artPlayerRef, router]);
 
