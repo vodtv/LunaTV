@@ -161,9 +161,10 @@ async function _fetchMobileApiData(id: string): Promise<{
  * 使用 unstable_cache 包裹移动端API请求
  * - 30分钟缓存（trailer URL 有时效性，需要较短缓存）
  * - 与详情页缓存分开管理
+ * - Next.js会自动根据函数参数区分缓存
  */
 const fetchMobileApiData = unstable_cache(
-  _fetchMobileApiData,
+  async (id: string) => _fetchMobileApiData(id),
   ['douban-mobile-api'],
   {
     revalidate: 1800, // 30分钟缓存
@@ -305,9 +306,10 @@ async function _scrapeDoubanDetails(id: string, retryCount = 0): Promise<any> {
  * 使用 unstable_cache 包裹爬虫函数
  * - 4小时缓存
  * - 自动重新验证
+ * - Next.js会自动根据函数参数区分缓存
  */
 export const scrapeDoubanDetails = unstable_cache(
-  _scrapeDoubanDetails,
+  async (id: string, retryCount = 0) => _scrapeDoubanDetails(id, retryCount),
   ['douban-details'],
   {
     revalidate: 14400, // 4小时缓存
@@ -351,15 +353,18 @@ export async function GET(request: Request) {
     const cacheTime = await getCacheTime();
 
     // 🔍 调试模式：绕过缓存
+    // 🎬 Trailer安全缓存：30分钟（与移动端API的unstable_cache保持一致）
+    // 因为trailer URL有效期约2-3小时，30分钟缓存确保用户拿到的链接仍然有效
+    const trailerSafeCacheTime = 1800; // 30分钟
     const cacheHeaders = noCache ? {
       'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
       'Pragma': 'no-cache',
       'Expires': '0',
       'X-Data-Source': 'no-cache-debug',
     } : {
-      'Cache-Control': `public, max-age=${cacheTime}, s-maxage=86400, stale-while-revalidate=43200`,
-      'CDN-Cache-Control': `public, s-maxage=86400`,
-      'Vercel-CDN-Cache-Control': `public, s-maxage=86400`,
+      'Cache-Control': `public, max-age=${trailerSafeCacheTime}, s-maxage=${trailerSafeCacheTime}, stale-while-revalidate=${trailerSafeCacheTime}`,
+      'CDN-Cache-Control': `public, s-maxage=${trailerSafeCacheTime}`,
+      'Vercel-CDN-Cache-Control': `public, s-maxage=${trailerSafeCacheTime}`,
       'Netlify-Vary': 'query',
       'X-Data-Source': 'scraper-cached',
     };
