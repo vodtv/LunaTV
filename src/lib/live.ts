@@ -23,6 +23,9 @@ export interface LiveChannels {
       title: string;
     }[];
   };
+  epgLogos: {
+    [key: string]: string; // tvgId/name -> logo URL from EPG
+  };
 }
 
 const cachedLiveChannels: { [key: string]: LiveChannels } = {};
@@ -70,7 +73,7 @@ export async function refreshLiveChannels(liveInfo: {
   const data = await response.text();
   const result = parseM3U(liveInfo.key, data);
   const epgUrl = liveInfo.epg || result.tvgUrl;
-  const epgs = await parseEpg(
+  const { epgs, logos } = await parseEpg(
     epgUrl,
     liveInfo.ua || defaultUA,
     result.channels.map(channel => channel.tvgId).filter(tvgId => tvgId),
@@ -81,22 +84,23 @@ export async function refreshLiveChannels(liveInfo: {
     channels: result.channels,
     epgUrl: epgUrl,
     epgs: epgs,
+    epgLogos: logos,
   };
   return result.channels.length;
 }
 
 /**
  * 清理频道名称用于匹配
- * 移除常见前缀、后缀、特殊字符等
+ * 移除常见前缀、特殊字符等，但保留 (a) (b) (c) 等版本标识
  */
 function normalizeChannelName(name: string): string {
   return name
     // 移除前缀如 [TW-I]、[HK]、01、02 等
     .replace(/^\[.*?\]\s*/g, '')
     .replace(/^\d+\s+/g, '')
-    // 移除后缀如 (a)、(b)、HD、4K 等
-    .replace(/\s*\([a-z0-9]+\)\s*/gi, '')
-    .replace(/\s*(HD|4K|FHD|UHD)\s*/gi, '')
+    // 移除质量标识如 HD、4K 等（但保留在括号外的）
+    .replace(/\s*(HD|4K|FHD|UHD)\s*$/gi, '')
+    .replace(/\s+(HD|4K|FHD|UHD)\s+/gi, ' ')
     // 移除多余空格
     .replace(/\s+/g, ' ')
     .trim()
@@ -123,37 +127,34 @@ async function parseEpg(
   tvgIds: string[],
   channels?: { tvgId: string; name: string }[]
 ): Promise<{
-  [key: string]: {
-    start: string;
-    end: string;
-    title: string;
-  }[]
+  epgs: {
+    [key: string]: {
+      start: string;
+      end: string;
+      title: string;
+    }[]
+  };
+  logos: {
+    [key: string]: string; // tvgId/name -> logo URL
+  };
 }> {
   if (!epgUrl) {
-    return {};
+    return { epgs: {}, logos: {} };
   }
 
   const tvgs = new Set(tvgIds);
   const result: { [key: string]: { start: string; end: string; title: string }[] } = {};
+  const logos: { [key: string]: string } = {};
 
-  // 构建频道名称到 tvgId 的映射（用于后备匹配）
-  const nameToTvgId = new Map<string, string>();
-  if (channels) {
-    for (const channel of channels) {
-      const normalizedName = normalizeChannelName(channel.name);
-      if (normalizedName) {
-        // 如果有 tvg-id 就用 tvg-id，否则用频道名称作为 key
-        const key = channel.tvgId || channel.name;
-        nameToTvgId.set(normalizedName, key);
-      }
-    }
-    console.log(`[EPG] 构建了 ${nameToTvgId.size} 个频道名称映射`);
-  }
+  // 第一阶段：收集 EPG 数据（按 EPG channel ID 存储）
+  const epgDataByChannelId: { [channelId: string]: { start: string; end: string; title: string }[] } = {};
 
   // 存储 EPG 频道名称到 channel ID 的映射（用于名称匹配）
   const epgNameToChannelId = new Map<string, string>();
-  // 反向映射：EPG channel ID 到标准化名称
-  const epgChannelIdToName = new Map<string, string>();
+  // 反向映射：EPG channel ID 到标准化名称数组（支持一个ID对应多个名称）
+  const epgChannelIdToNames = new Map<string, string[]>();
+  // EPG channel ID 到 logo URL 的映射
+  const epgChannelIdToLogo = new Map<string, string>();
 
   try {
     const response = await fetch(epgUrl, {
@@ -162,20 +163,19 @@ async function parseEpg(
       },
     });
     if (!response.ok) {
-      return {};
+      return { epgs: {}, logos: {} };
     }
 
     // 使用 ReadableStream 逐行处理，避免将整个文件加载到内存
     const reader = response.body?.getReader();
     if (!reader) {
-      return {};
+      return { epgs: {}, logos: {} };
     }
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let currentTvgId = '';
+    let currentEpgChannelId = '';
     let currentProgram: { start: string; end: string; title: string } | null = null;
-    let shouldSkipCurrentProgram = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -203,12 +203,25 @@ async function parseEpg(
             const displayName = displayNameMatch[1];
             const normalizedDisplayName = normalizeChannelName(displayName);
             epgNameToChannelId.set(normalizedDisplayName, channelId);
-            epgChannelIdToName.set(channelId, normalizedDisplayName); // 反向映射
+
+            // 支持一个 channel ID 对应多个 display-name
+            if (!epgChannelIdToNames.has(channelId)) {
+              epgChannelIdToNames.set(channelId, []);
+            }
+            epgChannelIdToNames.get(channelId)!.push(normalizedDisplayName);
           }
+
+          // 提取 icon URL
+          const iconMatch = trimmedLine.match(/<icon\s+src="([^"]*)"/);
+          if (channelId && iconMatch) {
+            const iconUrl = iconMatch[1];
+            epgChannelIdToLogo.set(channelId, iconUrl);
+          }
+
           continue; // 处理完 channel 标签后跳过后续逻辑
         }
 
-        // 解析 <programme> 标签
+        // 解析 <programme> 标签 - 直接按 EPG channel ID 存储
         if (trimmedLine.startsWith('<programme')) {
 
           // 提取 channel ID
@@ -225,57 +238,33 @@ async function parseEpg(
 
           if (epgChannelId && start && end) {
             currentProgram = { start, end, title: '' };
-
-            // 优先使用 tvg-id 精确匹配（保留原有逻辑）
-            if (tvgs.has(epgChannelId)) {
-              currentTvgId = epgChannelId;
-              shouldSkipCurrentProgram = false;
-            } else {
-              // 后备方案：使用名称匹配
-              // 从反向映射中查找 EPG channel ID 对应的标准化名称
-              const epgNormalizedName = epgChannelIdToName.get(epgChannelId);
-              if (epgNormalizedName) {
-                // 在 M3U 频道列表中查找匹配的名称
-                const matchedTvgId = nameToTvgId.get(epgNormalizedName);
-                if (matchedTvgId) {
-                  currentTvgId = matchedTvgId;
-                  shouldSkipCurrentProgram = false;
-                  console.log(`[EPG] 名称匹配成功: "${epgNormalizedName}" -> ${matchedTvgId}`);
-                } else {
-                  shouldSkipCurrentProgram = true;
-                }
-              } else {
-                shouldSkipCurrentProgram = true;
-              }
-            }
+            currentEpgChannelId = epgChannelId;
 
             // 检查是否 <title> 在同一行（内联格式）
-            if (!shouldSkipCurrentProgram) {
-              const inlineTitleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
-              if (inlineTitleMatch) {
-                currentProgram.title = inlineTitleMatch[1];
-                // 保存节目信息
-                if (!result[currentTvgId]) {
-                  result[currentTvgId] = [];
-                }
-                result[currentTvgId].push({ ...currentProgram });
-                currentProgram = null;
+            const inlineTitleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
+            if (inlineTitleMatch) {
+              currentProgram.title = inlineTitleMatch[1];
+
+              // 保存到 EPG channel ID 对应的数组
+              if (!epgDataByChannelId[epgChannelId]) {
+                epgDataByChannelId[epgChannelId] = [];
               }
+              epgDataByChannelId[epgChannelId].push({ ...currentProgram });
+              currentProgram = null;
             }
           }
         }
-        // 解析 <title> 标签 - 只有在需要解析当前节目时才处理
-        else if (trimmedLine.startsWith('<title') && currentProgram && !shouldSkipCurrentProgram) {
-          // 处理带有语言属性的title标签，如 <title lang="zh">远方的家2025-60</title>
+        // 解析 <title> 标签
+        else if (trimmedLine.startsWith('<title') && currentProgram) {
           const titleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
           if (titleMatch && currentProgram) {
             currentProgram.title = titleMatch[1];
 
-            // 保存节目信息
-            if (!result[currentTvgId]) {
-              result[currentTvgId] = [];
+            // 保存到 EPG channel ID 对应的数组
+            if (!epgDataByChannelId[currentEpgChannelId]) {
+              epgDataByChannelId[currentEpgChannelId] = [];
             }
-            result[currentTvgId].push({ ...currentProgram });
+            epgDataByChannelId[currentEpgChannelId].push({ ...currentProgram });
 
             currentProgram = null;
           }
@@ -283,8 +272,7 @@ async function parseEpg(
         // 处理 </programme> 标签
         else if (trimmedLine === '</programme>') {
           currentProgram = null;
-          currentTvgId = '';
-          shouldSkipCurrentProgram = false; // 重置跳过标志
+          currentEpgChannelId = '';
         }
       }
     }
@@ -292,7 +280,35 @@ async function parseEpg(
     // ignore
   }
 
-  return result;
+  // 第二阶段：为每个 M3U 频道分配 EPG 数据
+  if (channels) {
+    for (const channel of channels) {
+      const key = channel.tvgId || channel.name;
+      const normalizedName = normalizeChannelName(channel.name);
+
+      // 优先使用 tvg-id 精确匹配
+      if (channel.tvgId && tvgs.has(channel.tvgId) && epgDataByChannelId[channel.tvgId]) {
+        result[key] = epgDataByChannelId[channel.tvgId];
+        const logoUrl = epgChannelIdToLogo.get(channel.tvgId);
+        if (logoUrl && !logos[key]) {
+          logos[key] = logoUrl;
+        }
+      } else {
+        // 使用名称匹配：通过标准化名称查找 EPG channel ID
+        const epgChannelId = epgNameToChannelId.get(normalizedName);
+        if (epgChannelId && epgDataByChannelId[epgChannelId]) {
+          result[key] = epgDataByChannelId[epgChannelId];
+          const logoUrl = epgChannelIdToLogo.get(epgChannelId);
+          if (logoUrl && !logos[key]) {
+            logos[key] = logoUrl;
+          }
+          console.log(`[EPG] 名称匹配成功: "${normalizedName}" -> EPG channel ${epgChannelId} (${epgDataByChannelId[epgChannelId].length} programmes)`);
+        }
+      }
+    }
+  }
+
+  return { epgs: result, logos };
 }
 
 // 新增诊断版本的 parseEpg，返回详细的调试信息
@@ -332,6 +348,9 @@ export async function parseEpgWithDebug(
   const tvgs = new Set(tvgIds);
   const result: { [key: string]: { start: string; end: string; title: string }[] } = {};
 
+  // 第一阶段：收集 EPG 数据（按 EPG channel ID 存储）
+  const epgDataByChannelId: { [channelId: string]: { start: string; end: string; title: string }[] } = {};
+
   // 构建频道名称到 tvgId 的映射（用于后备匹配）
   const nameToTvgId = new Map<string, string>();
   if (channels) {
@@ -352,8 +371,10 @@ export async function parseEpgWithDebug(
 
   // 存储 EPG 频道名称到 channel ID 的映射（用于名称匹配）
   const epgNameToChannelId = new Map<string, string>();
-  // 反向映射：EPG channel ID 到标准化名称
-  const epgChannelIdToName = new Map<string, string>();
+  // 反向映射：EPG channel ID 到标准化名称数组（支持一个ID对应多个名称）
+  const epgChannelIdToNames = new Map<string, string[]>();
+  // EPG channel ID 到 logo URL 的映射
+  const epgChannelIdToLogo = new Map<string, string>();
 
   try {
     const response = await fetch(epgUrl, {
@@ -373,9 +394,8 @@ export async function parseEpgWithDebug(
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let currentTvgId = '';
+    let currentEpgChannelId = '';
     let currentProgram: { start: string; end: string; title: string } | null = null;
-    let shouldSkipCurrentProgram = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -403,12 +423,25 @@ export async function parseEpgWithDebug(
             const displayName = displayNameMatch[1];
             const normalizedDisplayName = normalizeChannelName(displayName);
             epgNameToChannelId.set(normalizedDisplayName, channelId);
-            epgChannelIdToName.set(channelId, normalizedDisplayName); // 反向映射
+
+            // 支持一个 channel ID 对应多个 display-name
+            if (!epgChannelIdToNames.has(channelId)) {
+              epgChannelIdToNames.set(channelId, []);
+            }
+            epgChannelIdToNames.get(channelId)!.push(normalizedDisplayName);
           }
+
+          // 提取 icon URL
+          const iconMatch = trimmedLine.match(/<icon\s+src="([^"]*)"/);
+          if (channelId && iconMatch) {
+            const iconUrl = iconMatch[1];
+            epgChannelIdToLogo.set(channelId, iconUrl);
+          }
+
           continue; // 处理完 channel 标签后跳过后续逻辑
         }
 
-        // 解析 <programme> 标签
+        // 解析 <programme> 标签 - 直接按 EPG channel ID 存储
         if (trimmedLine.startsWith('<programme')) {
           debugInfo.programmeTagsFound++;
 
@@ -426,81 +459,35 @@ export async function parseEpgWithDebug(
 
           if (epgChannelId && start && end) {
             currentProgram = { start, end, title: '' };
-
-            // 优先使用 tvg-id 精确匹配（保留原有逻辑）
-            if (tvgs.has(epgChannelId)) {
-              currentTvgId = epgChannelId;
-              shouldSkipCurrentProgram = false;
-              debugInfo.tvgIdMatchCount++;
-            } else {
-              // 后备方案：使用名称匹配
-              // 从反向映射中查找 EPG channel ID 对应的标准化名称
-              const epgNormalizedName = epgChannelIdToName.get(epgChannelId);
-              if (epgNormalizedName) {
-                // 在 M3U 频道列表中查找匹配的名称
-                const matchedTvgId = nameToTvgId.get(epgNormalizedName);
-                if (matchedTvgId) {
-                  currentTvgId = matchedTvgId;
-                  shouldSkipCurrentProgram = false;
-                  debugInfo.nameMatchCount++;
-                  // 只记录前 10 个名称匹配详情
-                  if (debugInfo.nameMatchDetails.length < 10) {
-                    debugInfo.nameMatchDetails.push({
-                      epgName: epgNormalizedName,
-                      m3uKey: matchedTvgId,
-                    });
-                  }
-                } else {
-                  // EPG 有这个名称，但 M3U 中没有匹配
-                  shouldSkipCurrentProgram = true;
-                  if (debugInfo.unmatchedEpgSample.length < 10) {
-                    debugInfo.unmatchedEpgSample.push({
-                      channelId: epgChannelId,
-                      normalizedName: epgNormalizedName,
-                    });
-                  }
-                }
-              } else {
-                // EPG channel ID 没有对应的 display-name
-                shouldSkipCurrentProgram = true;
-                if (debugInfo.unmatchedEpgSample.length < 10) {
-                  debugInfo.unmatchedEpgSample.push({
-                    channelId: epgChannelId,
-                    normalizedName: undefined,
-                  });
-                }
-              }
-            }
+            currentEpgChannelId = epgChannelId;
 
             // 检查是否 <title> 在同一行（内联格式）
-            if (!shouldSkipCurrentProgram) {
-              const inlineTitleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
-              if (inlineTitleMatch) {
-                currentProgram.title = inlineTitleMatch[1];
-                // 保存节目信息
-                if (!result[currentTvgId]) {
-                  result[currentTvgId] = [];
-                }
-                result[currentTvgId].push({ ...currentProgram });
-                debugInfo.titleTagsFound++;
-                currentProgram = null;
+            const inlineTitleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
+            if (inlineTitleMatch) {
+              currentProgram.title = inlineTitleMatch[1];
+
+              // 保存到 EPG channel ID 对应的数组
+              if (!epgDataByChannelId[epgChannelId]) {
+                epgDataByChannelId[epgChannelId] = [];
               }
+              epgDataByChannelId[epgChannelId].push({ ...currentProgram });
+              debugInfo.titleTagsFound++;
+              currentProgram = null;
             }
           }
         }
-        // 解析 <title> 标签 - 只有在需要解析当前节目时才处理
-        else if (trimmedLine.startsWith('<title') && currentProgram && !shouldSkipCurrentProgram) {
+        // 解析 <title> 标签
+        else if (trimmedLine.startsWith('<title') && currentProgram) {
           debugInfo.titleTagsFound++;
-          // 处理带有语言属性的title标签，如 <title lang="zh">远方的家2025-60</title>
           const titleMatch = trimmedLine.match(/<title(?:\s+[^>]*)?>(.*?)<\/title>/);
           if (titleMatch && currentProgram) {
             currentProgram.title = titleMatch[1];
 
-            // 保存节目信息
-            if (!result[currentTvgId]) {
-              result[currentTvgId] = [];
+            // 保存到 EPG channel ID 对应的数组
+            if (!epgDataByChannelId[currentEpgChannelId]) {
+              epgDataByChannelId[currentEpgChannelId] = [];
             }
-            result[currentTvgId].push({ ...currentProgram });
+            epgDataByChannelId[currentEpgChannelId].push({ ...currentProgram });
 
             currentProgram = null;
           }
@@ -508,8 +495,7 @@ export async function parseEpgWithDebug(
         // 处理 </programme> 标签
         else if (trimmedLine === '</programme>') {
           currentProgram = null;
-          currentTvgId = '';
-          shouldSkipCurrentProgram = false; // 重置跳过标志
+          currentEpgChannelId = '';
         }
       }
     }
@@ -524,6 +510,40 @@ export async function parseEpgWithDebug(
   } catch (error) {
     // ignore
   }
+
+  // 第二阶段：为每个 M3U 频道分配 EPG 数据，并更新 debug 统计
+  if (channels) {
+    for (const channel of channels) {
+      const key = channel.tvgId || channel.name;
+      const normalizedName = normalizeChannelName(channel.name);
+
+      // 优先使用 tvg-id 精确匹配
+      if (channel.tvgId && tvgs.has(channel.tvgId) && epgDataByChannelId[channel.tvgId]) {
+        result[key] = epgDataByChannelId[channel.tvgId];
+        debugInfo.tvgIdMatchCount++;
+        const logoUrl = epgChannelIdToLogo.get(channel.tvgId);
+        if (logoUrl && !result[key]) {
+          // logos not used in debug version
+        }
+      } else {
+        // 使用名称匹配：通过标准化名称查找 EPG channel ID
+        const epgChannelId = epgNameToChannelId.get(normalizedName);
+        if (epgChannelId && epgDataByChannelId[epgChannelId]) {
+          result[key] = epgDataByChannelId[epgChannelId];
+          debugInfo.nameMatchCount++;
+          // 只记录前 10 个名称匹配详情
+          if (debugInfo.nameMatchDetails.length < 10) {
+            debugInfo.nameMatchDetails.push({
+              epgName: normalizedName,
+              m3uKey: key,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  debugInfo.epgResultKeys = Object.keys(result).slice(0, 10);
 
   return { epgs: result, debug: debugInfo };
 }
