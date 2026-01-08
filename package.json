@@ -3,8 +3,8 @@
   "version": "5.9.2",
   "private": true,
   "scripts": {
-    "dev": "pnpm gen:manifest && next dev -H 0.0.0.0",
-    "build": "pnpm gen:manifest && next build",
+    "dev": "npm gen:manifest && next dev -H 0.0.0.0",
+    "build": "npm gen:manifest && next build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "eslint src --fix && pnpm format",
