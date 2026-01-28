@@ -431,11 +431,12 @@ const MultiLevelSelector: React.FC<MultiLevelSelectorProps> = ({
     if (!category) return '';
 
     const value = values[categoryKey];
+    const defaultSort = (contentType === 'anime-tv' || contentType === 'anime-movie') ? 'U' : 'T';
 
     if (
       !value ||
       value === 'all' ||
-      (categoryKey === 'sort' && value === 'T')
+      (categoryKey === 'sort' && value === defaultSort)
     ) {
       return category.label;
     }
