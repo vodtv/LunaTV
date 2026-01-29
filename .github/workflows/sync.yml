@@ -2,7 +2,7 @@ name: Upstream Sync
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # 每 6 小时运行一次
+    - cron: '0 */24 * * *' # 每 24 小时运行一次
   workflow_dispatch:       # 手动触发
   push:
     branches:
