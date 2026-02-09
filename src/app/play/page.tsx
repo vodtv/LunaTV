@@ -3,6 +3,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Hls from 'hls.js';
 import { Heart, ChevronUp, Download, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -138,6 +139,8 @@ function PlayPageClient() {
 
   // 弹幕设置面板状态
   const [isDanmuSettingsPanelOpen, setIsDanmuSettingsPanelOpen] = useState(false);
+  const [, setDanmuSettingsVersion] = useState(0);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
   // 下载选集面板状态
   const [showDownloadEpisodeSelector, setShowDownloadEpisodeSelector] = useState(false);
@@ -4168,6 +4171,9 @@ function PlayPageClient() {
         ],
       });
 
+      // 设置 Portal 容器为 ArtPlayer 的 $player 元素（全屏时只有该元素可见）
+      setPortalContainer(artPlayerRef.current.template.$player);
+
       // 监听播放器事件
       artPlayerRef.current.on('ready', async () => {
         setError(null);
@@ -5370,95 +5376,102 @@ function PlayPageClient() {
         onReject={rejectFollowOwner}
       />
 
-      {/* 🎨 美化的弹幕设置面板 */}
-      <DanmuSettingsPanel
-        isOpen={isDanmuSettingsPanelOpen}
-        onClose={() => setIsDanmuSettingsPanelOpen(false)}
-        settings={{
-          enabled: externalDanmuEnabled, // 启用弹幕主开关
-          fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '25'),
-          speed: parseFloat(localStorage.getItem('danmaku_speed') || '5'),
-          opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.8'),
-          margin: JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]'),
-          modes: JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]') as Array<0 | 1 | 2>,
-          antiOverlap: localStorage.getItem('danmaku_antiOverlap') !== null
-            ? localStorage.getItem('danmaku_antiOverlap') === 'true'
-            : true, // 默认开启防重叠
-          visible: localStorage.getItem('danmaku_visible') !== 'false',
-        }}
-        matchInfo={
-          detail?.title && currentEpisodeIndex >= 0
-            ? {
-                animeTitle: detail.title,
-                episodeTitle: `第 ${currentEpisodeIndex + 1} 集`,
+      {/* 🎨 美化的弹幕设置面板 - Portal 到 ArtPlayer $player 支持全屏 */}
+      {isDanmuSettingsPanelOpen && portalContainer && createPortal(
+        <div style={{ all: 'initial', fontFamily: 'Inter, system-ui, sans-serif', position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 9999 }}>
+          <style>{`.danmu-iso svg { fill: none !important; }`}</style>
+          <div className="danmu-iso" style={{ pointerEvents: 'auto' }}>
+            <DanmuSettingsPanel
+              isOpen={isDanmuSettingsPanelOpen}
+              onClose={() => setIsDanmuSettingsPanelOpen(false)}
+              settings={{
+                enabled: externalDanmuEnabled, // 启用弹幕主开关
+                fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '25'),
+                speed: parseFloat(localStorage.getItem('danmaku_speed') || '5'),
+                opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.8'),
+                margin: JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]'),
+                modes: JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]') as Array<0 | 1 | 2>,
+                antiOverlap: localStorage.getItem('danmaku_antiOverlap') !== null
+                  ? localStorage.getItem('danmaku_antiOverlap') === 'true'
+                  : true, // 默认开启防重叠
+                visible: localStorage.getItem('danmaku_visible') !== 'false',
+              }}
+              matchInfo={
+                detail?.title && currentEpisodeIndex >= 0
+                  ? {
+                      animeTitle: detail.title,
+                      episodeTitle: `第 ${currentEpisodeIndex + 1} 集`,
+                    }
+                  : null
               }
-            : null
-        }
-        onSettingsChange={(newSettings) => {
-          // 更新启用状态
-          if (newSettings.enabled !== undefined) {
-            handleDanmuOperationOptimized(newSettings.enabled);
-          }
+              onSettingsChange={(newSettings) => {
+                // 更新启用状态
+                if (newSettings.enabled !== undefined) {
+                  handleDanmuOperationOptimized(newSettings.enabled);
+                }
 
-          // 更新 localStorage
-          if (newSettings.fontSize !== undefined) {
-            localStorage.setItem('danmaku_fontSize', String(newSettings.fontSize));
-          }
-          if (newSettings.speed !== undefined) {
-            localStorage.setItem('danmaku_speed', String(newSettings.speed));
-          }
-          if (newSettings.opacity !== undefined) {
-            localStorage.setItem('danmaku_opacity', String(newSettings.opacity));
-          }
-          if (newSettings.margin !== undefined) {
-            localStorage.setItem('danmaku_margin', JSON.stringify(newSettings.margin));
-          }
-          if (newSettings.modes !== undefined) {
-            localStorage.setItem('danmaku_modes', JSON.stringify(newSettings.modes));
-          }
-          if (newSettings.antiOverlap !== undefined) {
-            localStorage.setItem('danmaku_antiOverlap', String(newSettings.antiOverlap));
-          }
-          if (newSettings.visible !== undefined) {
-            localStorage.setItem('danmaku_visible', String(newSettings.visible));
-          }
+                // 更新 localStorage
+                if (newSettings.fontSize !== undefined) {
+                  localStorage.setItem('danmaku_fontSize', String(newSettings.fontSize));
+                }
+                if (newSettings.speed !== undefined) {
+                  localStorage.setItem('danmaku_speed', String(newSettings.speed));
+                }
+                if (newSettings.opacity !== undefined) {
+                  localStorage.setItem('danmaku_opacity', String(newSettings.opacity));
+                }
+                if (newSettings.margin !== undefined) {
+                  localStorage.setItem('danmaku_margin', JSON.stringify(newSettings.margin));
+                }
+                if (newSettings.modes !== undefined) {
+                  localStorage.setItem('danmaku_modes', JSON.stringify(newSettings.modes));
+                }
+                if (newSettings.antiOverlap !== undefined) {
+                  localStorage.setItem('danmaku_antiOverlap', String(newSettings.antiOverlap));
+                }
+                if (newSettings.visible !== undefined) {
+                  localStorage.setItem('danmaku_visible', String(newSettings.visible));
+                }
 
-          // 实时更新弹幕插件配置
-          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-            artPlayerRef.current.plugins.artplayerPluginDanmuku.config(newSettings);
+                // 实时更新弹幕插件配置
+                if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+                  artPlayerRef.current.plugins.artplayerPluginDanmuku.config(newSettings);
 
-            // 处理显示/隐藏
-            if (newSettings.visible !== undefined) {
-              if (newSettings.visible) {
-                artPlayerRef.current.plugins.artplayerPluginDanmuku.show();
-              } else {
-                artPlayerRef.current.plugins.artplayerPluginDanmuku.hide();
-              }
-            }
-          }
+                  // 处理显示/隐藏
+                  if (newSettings.visible !== undefined) {
+                    if (newSettings.visible) {
+                      artPlayerRef.current.plugins.artplayerPluginDanmuku.show();
+                    } else {
+                      artPlayerRef.current.plugins.artplayerPluginDanmuku.hide();
+                    }
+                  }
+                }
 
-          // 强制重新渲染面板以显示新值
-          setIsDanmuSettingsPanelOpen(false);
-          setTimeout(() => setIsDanmuSettingsPanelOpen(true), 50);
-        }}
-        danmuCount={danmuList.length} // 使用state而不是ref，确保React能追踪变化
-        loading={danmuLoading}
-        loadMeta={danmuLoadMeta}
-        error={danmuError}
-        onReload={async () => {
-          // 重新加载外部弹幕（强制刷新）
-          const result = await loadExternalDanmu({ force: true });
-          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-            artPlayerRef.current.plugins.artplayerPluginDanmuku.load(result.data);
-            if (result.count > 0) {
-              artPlayerRef.current.notice.show = `已加载 ${result.count} 条弹幕`;
-            } else {
-              artPlayerRef.current.notice.show = '暂无弹幕数据';
-            }
-          }
-          return result.count;
-        }}
-      />
+                // 触发面板重新读取设置（通过 key 变化）
+                setDanmuSettingsVersion(v => v + 1);
+              }}
+              danmuCount={danmuList.length} // 使用state而不是ref，确保React能追踪变化
+              loading={danmuLoading}
+              loadMeta={danmuLoadMeta}
+              error={danmuError}
+              onReload={async () => {
+                // 重新加载外部弹幕（强制刷新）
+                const result = await loadExternalDanmu({ force: true });
+                if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+                  artPlayerRef.current.plugins.artplayerPluginDanmuku.load(result.data);
+                  if (result.count > 0) {
+                    artPlayerRef.current.notice.show = `已加载 ${result.count} 条弹幕`;
+                  } else {
+                    artPlayerRef.current.notice.show = '暂无弹幕数据';
+                  }
+                }
+                return result.count;
+              }}
+            />
+          </div>
+        </div>,
+        portalContainer
+      )}
       </PageLayout>
 
       {/* 网盘资源模态框 */}
