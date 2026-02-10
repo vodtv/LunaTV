@@ -399,6 +399,30 @@ function PlayPageClient() {
     availableSources,
   ]);
 
+  // 🎬 更新全屏标题层内容（集数变化时）
+  // portalContainer 作为依赖确保 ArtPlayer 初始化后再执行
+  useEffect(() => {
+    if (!artPlayerRef.current) return;
+    const titleLayer = artPlayerRef.current.layers['fullscreen-title'];
+    if (!titleLayer) return;
+
+    const episodeName = detail?.episodes_titles?.[currentEpisodeIndex] || '';
+    const hasEpisodes = detail?.episodes && detail.episodes.length > 1;
+
+    titleLayer.innerHTML = `
+      <div class="fullscreen-title-container">
+        <div class="fullscreen-title-content">
+          <h1 class="fullscreen-title-text">${detail?.title || ''}</h1>
+          ${hasEpisodes && episodeName
+            ? `<span class="fullscreen-episode-text">${episodeName}</span>`
+            : hasEpisodes
+              ? `<span class="fullscreen-episode-text">第 ${currentEpisodeIndex + 1} 集</span>`
+              : ''}
+        </div>
+      </div>
+    `;
+  }, [currentEpisodeIndex, detail, portalContainer]);
+
   // 获取自定义去广告代码
   useEffect(() => {
     const fetchAdFilterCode = async () => {
@@ -4204,6 +4228,35 @@ function PlayPageClient() {
           },
         });
 
+        // 🎬 全屏标题/集数层
+        const fsEpisodeName = detail?.episodes_titles?.[currentEpisodeIndex] || '';
+        const fsHasEpisodes = detail?.episodes && detail.episodes.length > 1;
+        artPlayerRef.current.layers.add({
+          name: 'fullscreen-title',
+          html: `
+            <div class="fullscreen-title-container">
+              <div class="fullscreen-title-content">
+                <h1 class="fullscreen-title-text">${detail?.title || ''}</h1>
+                ${fsHasEpisodes && fsEpisodeName
+                  ? `<span class="fullscreen-episode-text">${fsEpisodeName}</span>`
+                  : fsHasEpisodes
+                    ? `<span class="fullscreen-episode-text">第 ${currentEpisodeIndex + 1} 集</span>`
+                    : ''}
+              </div>
+            </div>
+          `,
+          style: {
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            right: '0',
+            height: '80px',
+            display: 'none',
+            pointerEvents: 'none',
+            zIndex: '20',
+          },
+        });
+
         // 自动隐藏徽章的定时器
         let badgeHideTimer: NodeJS.Timeout | null = null;
 
@@ -4815,8 +4868,12 @@ function PlayPageClient() {
         lastPlaybackRateRef.current = artPlayerRef.current.playbackRate;
       });
 
-      // 监听全屏事件，进入全屏后自动隐藏控制栏
+      // 监听全屏事件，进入全屏后自动隐藏控制栏 + 显示标题层
       artPlayerRef.current.on('fullscreen', (isFullscreen: boolean) => {
+        const titleLayer = artPlayerRef.current?.layers['fullscreen-title'];
+        if (titleLayer) {
+          titleLayer.style.display = isFullscreen ? 'block' : 'none';
+        }
         if (isFullscreen) {
           // 进入全屏后，延迟100ms触发控制栏自动隐藏
           setTimeout(() => {
@@ -4824,6 +4881,14 @@ function PlayPageClient() {
               artPlayerRef.current.controls.show = true;
             }
           }, 100);
+        }
+      });
+
+      // 监听网页全屏事件，显示/隐藏标题层
+      artPlayerRef.current.on('fullscreenWeb', (isFullscreenWeb: boolean) => {
+        const titleLayer = artPlayerRef.current?.layers['fullscreen-title'];
+        if (titleLayer) {
+          titleLayer.style.display = isFullscreenWeb ? 'block' : 'none';
         }
       });
 
