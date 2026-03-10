@@ -3,6 +3,8 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { cookies } from 'next/headers';
+import { Suspense } from 'react';
+import { Toaster } from 'sonner';
 
 import './globals.css';
 
@@ -68,8 +70,10 @@ export default async function RootLayout({
   let disableYellowFilter =
     process.env.NEXT_PUBLIC_DISABLE_YELLOW_FILTER === 'true';
   let fluidSearch = process.env.NEXT_PUBLIC_FLUID_SEARCH !== 'false';
+  let enableWebLive = false;
   let customAdFilterVersion = 0;
   let aiRecommendEnabled = false;
+  let embyEnabled = false;
   let customCategories = [] as {
     name: string;
     type: 'movie' | 'tv';
@@ -93,8 +97,15 @@ export default async function RootLayout({
       query: category.query,
     }));
     fluidSearch = config.SiteConfig.FluidSearch;
+    enableWebLive = config.SiteConfig.EnableWebLive ?? false;
     customAdFilterVersion = config.SiteConfig?.CustomAdFilterVersion || 0;
     aiRecommendEnabled = config.AIRecommendConfig?.enabled ?? false;
+    // 检查是否启用了 Emby 功能（支持多源）
+    embyEnabled = !!(
+      config.EmbyConfig?.Sources &&
+      config.EmbyConfig.Sources.length > 0 &&
+      config.EmbyConfig.Sources.some(s => s.enabled && s.ServerURL)
+    );
   }
 
   // 将运行时配置注入到全局 window 对象，供客户端在运行时读取
@@ -107,8 +118,11 @@ export default async function RootLayout({
     DISABLE_YELLOW_FILTER: disableYellowFilter,
     CUSTOM_CATEGORIES: customCategories,
     FLUID_SEARCH: fluidSearch,
+    ENABLE_WEB_LIVE: enableWebLive,
     CUSTOM_AD_FILTER_VERSION: customAdFilterVersion,
     AI_RECOMMEND_ENABLED: aiRecommendEnabled,
+    EMBY_ENABLED: embyEnabled,
+    PRIVATE_LIBRARY_ENABLED: embyEnabled,
     // 禁用预告片：Vercel 自动检测，或用户手动设置 DISABLE_HERO_TRAILER=true
     DISABLE_HERO_TRAILER: process.env.VERCEL === '1' || process.env.DISABLE_HERO_TRAILER === 'true',
   };
@@ -144,16 +158,21 @@ export default async function RootLayout({
               <DownloadProvider>
                 <WatchRoomProvider>
                   <SiteProvider siteName={siteName} announcement={announcement}>
-                    <SessionTracker />
-                    {children}
-                    <GlobalErrorIndicator />
+                    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+                      <SessionTracker />
+                      {children}
+                      <GlobalErrorIndicator />
+                    </Suspense>
                   </SiteProvider>
-                  <DownloadPanel />
-                  <ChatFloatingWindow />
+                  <Suspense fallback={null}>
+                    <DownloadPanel />
+                    <ChatFloatingWindow />
+                  </Suspense>
                 </WatchRoomProvider>
               </DownloadProvider>
             </GlobalCacheProvider>
           </QueryProvider>
+          <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
       </body>
     </html>
