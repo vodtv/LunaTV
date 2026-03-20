@@ -3,7 +3,8 @@
 
 import { ChevronUp, Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import React, { startTransition, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, experimental_streamedQuery as streamedQuery } from '@tanstack/react-query';
 
 import {
   addSearchHistory,
@@ -13,6 +14,126 @@ import {
   subscribeToDataUpdates,
 } from '@/lib/db.client';
 import { SearchResult } from '@/lib/types';
+
+// ─── streamedQuery 类型 ───────────────────────────────────────────────────────
+
+type SSEChunk =
+  | { type: 'start'; totalSources: number }
+  | { type: 'source_result'; results: SearchResult[] }  // 80ms 批量
+  | { type: 'source_progress' }                          // 进度 +1（无数据）
+  | { type: 'source_error' }
+  | { type: 'complete'; completedSources: number };
+
+type StreamedState = {
+  results: SearchResult[];
+  totalSources: number;
+  completedSources: number;
+};
+
+const STREAMED_INITIAL: StreamedState = { results: [], totalSources: 0, completedSources: 0 };
+
+/**
+ * 将 EventSource 包装为 AsyncIterable<SSEChunk>
+ *
+ * 缓冲策略：
+ * - source_result 数据积入 pending，每 80ms 批量 yield 一次
+ * - complete 到达时同步 flush pending，确保数据不丢失
+ * - 进度（completedSources）通过独立的 source_progress chunk 实时更新
+ */
+function eventSourceIterable(url: string, signal?: AbortSignal): AsyncIterable<SSEChunk> {
+  return {
+    [Symbol.asyncIterator]() {
+      type Item = { value: SSEChunk; done: false } | { value: undefined; done: true };
+      const queue: Item[] = [];
+      let waiting: ((item: Item) => void) | null = null;
+      let closed = false;
+
+      let pending: SearchResult[] = [];
+      let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const enqueue = (chunk: SSEChunk) => {
+        if (closed) return;
+        const item: Item = { value: chunk, done: false };
+        if (waiting) { const w = waiting; waiting = null; w(item); }
+        else queue.push(item);
+      };
+
+      const flushPending = () => {
+        flushTimer = null;
+        if (pending.length === 0) return;
+        enqueue({ type: 'source_result', results: pending });
+        pending = [];
+      };
+
+      const close = (completedSources?: number) => {
+        if (closed) return;
+        // 同步 flush 剩余缓冲
+        if (flushTimer !== null) { clearTimeout(flushTimer); flushTimer = null; }
+        if (pending.length > 0) {
+          enqueue({ type: 'source_result', results: pending });
+          pending = [];
+        }
+        if (completedSources !== undefined) {
+          enqueue({ type: 'complete', completedSources });
+        }
+        closed = true;
+        const done: Item = { value: undefined, done: true };
+        if (waiting) { const w = waiting; waiting = null; w(done); }
+        else queue.push(done);
+      };
+
+      const es = new EventSource(url);
+
+      es.onmessage = (event) => {
+        if (!event.data || closed) return;
+        try {
+          const payload = JSON.parse(event.data);
+          switch (payload.type) {
+            case 'start':
+              enqueue({ type: 'start', totalSources: payload.totalSources || 0 });
+              break;
+            case 'source_result':
+              // 进度立即更新
+              enqueue({ type: 'source_progress' });
+              // 数据缓冲 80ms 批量
+              if (Array.isArray(payload.results) && payload.results.length > 0) {
+                pending.push(...(payload.results as SearchResult[]));
+                if (flushTimer === null) {
+                  flushTimer = setTimeout(flushPending, 80);
+                }
+              }
+              break;
+            case 'source_error':
+              enqueue({ type: 'source_error' });
+              break;
+            case 'complete':
+              try { es.close(); } catch {}
+              close(payload.completedSources ?? 0);
+              break;
+          }
+        } catch {}
+      };
+
+      es.onerror = () => {
+        try { es.close(); } catch {}
+        close();
+      };
+
+      signal?.addEventListener('abort', () => {
+        try { es.close(); } catch {}
+        close();
+      });
+
+      return {
+        next(): Promise<IteratorResult<SSEChunk>> {
+          if (queue.length > 0) return Promise.resolve(queue.shift()!);
+          if (closed) return Promise.resolve({ value: undefined, done: true });
+          return new Promise((resolve) => { waiting = resolve; });
+        },
+      };
+    },
+  };
+}
 
 import PageLayout from '@/components/PageLayout';
 import SearchResultFilter, { SearchFilterCategory } from '@/components/SearchResultFilter';
@@ -54,15 +175,8 @@ function SearchPageClient() {
   const searchParams = useSearchParams();
   const currentQueryRef = useRef<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const [totalSources, setTotalSources] = useState(0);
-  const [completedSources, setCompletedSources] = useState(0);
-  const pendingResultsRef = useRef<SearchResult[]>([]);
-  const flushTimerRef = useRef<number | null>(null);
   const [useFluidSearch, setUseFluidSearch] = useState(true);
   // 虚拟化开关状态
   const [useVirtualization, setUseVirtualization] = useState(() => {
@@ -206,26 +320,6 @@ function SearchPageClient() {
     }
   };
 
-  // 在“无排序”场景用于每个源批次的预排序：完全匹配标题优先，其次年份倒序，未知年份最后
-  const sortBatchForNoOrder = (items: SearchResult[]) => {
-    const q = currentQueryRef.current.trim();
-    return items.slice().sort((a, b) => {
-      const aExact = (a.title || '').trim() === q;
-      const bExact = (b.title || '').trim() === q;
-      if (aExact && !bExact) return -1;
-      if (!aExact && bExact) return 1;
-
-      const aNum = Number.parseInt(a.year as any, 10);
-      const bNum = Number.parseInt(b.year as any, 10);
-      const aValid = !Number.isNaN(aNum);
-      const bValid = !Number.isNaN(bNum);
-      if (aValid && !bValid) return -1;
-      if (!aValid && bValid) return 1;
-      if (aValid && bValid) return bNum - aNum; // 年份倒序
-      return 0;
-    });
-  };
-
   // 简化的年份排序：unknown/空值始终在最后
   const compareYear = (aYear: string, bYear: string, order: 'none' | 'asc' | 'desc') => {
     // 如果是无排序状态，返回0（保持原顺序）
@@ -264,6 +358,65 @@ function SearchPageClient() {
 
     return false;
   };
+
+  // ─── TanStack Query 驱动搜索 ────────────────────────────────────────────────
+  const trimmedQuery = useMemo(() => (searchParams.get('q') || '').trim(), [searchParams]);
+
+  // 流式搜索
+  const streamedSearchQuery = useQuery<StreamedState>({
+    queryKey: ['search', 'streamed', trimmedQuery],
+    queryFn: streamedQuery<SSEChunk, StreamedState>({
+      streamFn: (ctx) => eventSourceIterable(
+        `/api/search/ws?q=${encodeURIComponent(trimmedQuery)}`,
+        ctx.signal,
+      ),
+      refetchMode: 'reset',
+      reducer: (acc: StreamedState, chunk: SSEChunk): StreamedState => {
+        switch (chunk.type) {
+          case 'start':
+            return { results: [], totalSources: chunk.totalSources, completedSources: 0 };
+          case 'source_result':
+            return { ...acc, results: acc.results.concat(chunk.results) };
+          case 'source_progress':
+            return { ...acc, completedSources: acc.completedSources + 1 };
+          case 'source_error':
+            return { ...acc, completedSources: acc.completedSources + 1 };
+          case 'complete':
+            return { ...acc, completedSources: chunk.completedSources || acc.totalSources };
+        }
+      },
+      initialValue: STREAMED_INITIAL,
+    }),
+    enabled: !!trimmedQuery && useFluidSearch,
+    staleTime: 0,
+    gcTime: 0,
+  });
+
+  // 传统搜索
+  const traditionalSearchQuery = useQuery<SearchResult[]>({
+    queryKey: ['search', 'traditional', trimmedQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`);
+      const data = await res.json();
+      return Array.isArray(data.results) ? (data.results as SearchResult[]) : [];
+    },
+    enabled: !!trimmedQuery && !useFluidSearch,
+    staleTime: 0,
+    gcTime: 0,
+  });
+
+  // 派生统一搜索状态
+  const searchResults: SearchResult[] = useFluidSearch
+    ? (streamedSearchQuery.data?.results ?? [])
+    : (traditionalSearchQuery.data ?? []);
+  const totalSources = useFluidSearch ? (streamedSearchQuery.data?.totalSources ?? 0) : 1;
+  const completedSources = useFluidSearch
+    ? (streamedSearchQuery.data?.completedSources ?? 0)
+    : (traditionalSearchQuery.isSuccess ? 1 : 0);
+  const isLoading = useFluidSearch
+    ? streamedSearchQuery.isFetching
+    : traditionalSearchQuery.isFetching;
+
   // 聚合后的结果（按标题和年份分组）
   const aggregatedResults = useMemo(() => {
     // 首先应用精确搜索过滤
@@ -391,9 +544,23 @@ function SearchPageClient() {
       return true;
     });
 
-    // 如果是无排序状态，直接返回过滤后的原始顺序
+    // 如果是无排序状态，按精确匹配优先+年份倒序排列（保留来源到达顺序的相对位置）
     if (yearOrder === 'none') {
-      return filtered;
+      const q = currentQueryRef.current.trim();
+      return filtered.slice().sort((a, b) => {
+        const aExact = (a.title || '').trim() === q;
+        const bExact = (b.title || '').trim() === q;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        const aNum = Number.parseInt(a.year as any, 10);
+        const bNum = Number.parseInt(b.year as any, 10);
+        const aValid = !Number.isNaN(aNum);
+        const bValid = !Number.isNaN(bNum);
+        if (aValid && !bValid) return -1;
+        if (!aValid && bValid) return 1;
+        if (aValid && bValid) return bNum - aNum;
+        return 0;
+      });
     }
 
     // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
@@ -428,9 +595,25 @@ function SearchPageClient() {
       return true;
     });
 
-    // 如果是无排序状态，保持按关键字+年份+类型出现的原始顺序
+    // 如果是无排序状态，按精确匹配优先+年份倒序排列
     if (yearOrder === 'none') {
-      return filtered;
+      const q = currentQueryRef.current.trim();
+      return filtered.slice().sort((a, b) => {
+        const aTitle = (a[1][0]?.title || '').trim();
+        const bTitle = (b[1][0]?.title || '').trim();
+        const aExact = aTitle === q;
+        const bExact = bTitle === q;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+        const aNum = Number.parseInt(a[1][0]?.year as any, 10);
+        const bNum = Number.parseInt(b[1][0]?.year as any, 10);
+        const aValid = !Number.isNaN(aNum);
+        const bValid = !Number.isNaN(bNum);
+        if (aValid && !bValid) return -1;
+        if (!aValid && bValid) return 1;
+        if (aValid && bValid) return bNum - aNum;
+        return 0;
+      });
     }
 
     // 简化排序：1. 年份排序，2. 年份相同时精确匹配在前，3. 标题排序
@@ -558,180 +741,30 @@ function SearchPageClient() {
   }, [searchType, netdiskResourceType, showResults, searchQuery, searchParams, netdiskLoading, netdiskResults, netdiskError, youtubeLoading, youtubeResults, youtubeError, tmdbActorLoading, tmdbActorResults, tmdbActorError]);
 
   useEffect(() => {
-    // 当搜索参数变化时更新搜索状态
+    // 当搜索参数变化时更新 UI 状态（数据获取由 TanStack Query 驱动）
     const query = searchParams.get('q') || '';
     currentQueryRef.current = query.trim();
 
     if (query) {
       setSearchQuery(query);
-      // 新搜索：关闭旧连接并清空结果
-      if (eventSourceRef.current) {
-        try { eventSourceRef.current.close(); } catch { }
-        eventSourceRef.current = null;
-      }
-      setSearchResults([]);
-      setTotalSources(0);
-      setCompletedSources(0);
-      // 清理缓冲
-      pendingResultsRef.current = [];
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      setIsLoading(true);
       setShowResults(true);
-
-      const trimmed = query.trim();
-
-      // 每次搜索时重新读取设置，确保使用最新的配置
-      let currentFluidSearch = useFluidSearch;
-      if (typeof window !== 'undefined') {
-        const savedFluidSearch = localStorage.getItem('fluidSearch');
-        if (savedFluidSearch !== null) {
-          currentFluidSearch = JSON.parse(savedFluidSearch);
-        } else {
-          const defaultFluidSearch = (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
-          currentFluidSearch = defaultFluidSearch;
-        }
-      }
-
-      // 如果读取的配置与当前状态不同，更新状态
-      if (currentFluidSearch !== useFluidSearch) {
-        setUseFluidSearch(currentFluidSearch);
-      }
-
-      if (currentFluidSearch) {
-        // 流式搜索：打开新的流式连接
-        const es = new EventSource(`/api/search/ws?q=${encodeURIComponent(trimmed)}`);
-        eventSourceRef.current = es;
-
-        es.onmessage = (event) => {
-          if (!event.data) return;
-          try {
-            const payload = JSON.parse(event.data);
-            if (currentQueryRef.current !== trimmed) return;
-            switch (payload.type) {
-              case 'start':
-                setTotalSources(payload.totalSources || 0);
-                setCompletedSources(0);
-                break;
-              case 'source_result': {
-                setCompletedSources((prev) => prev + 1);
-                if (Array.isArray(payload.results) && payload.results.length > 0) {
-                  // 缓冲新增结果，节流刷入，避免频繁重渲染导致闪烁
-                  const activeYearOrder = (viewMode === 'agg' ? (filterAgg.yearOrder) : (filterAll.yearOrder));
-                  const incoming: SearchResult[] =
-                    activeYearOrder === 'none'
-                      ? sortBatchForNoOrder(payload.results as SearchResult[])
-                      : (payload.results as SearchResult[]);
-                  pendingResultsRef.current.push(...incoming);
-                  if (!flushTimerRef.current) {
-                    flushTimerRef.current = window.setTimeout(() => {
-                      const toAppend = pendingResultsRef.current;
-                      pendingResultsRef.current = [];
-                      startTransition(() => {
-                        setSearchResults((prev) => prev.concat(toAppend));
-                      });
-                      flushTimerRef.current = null;
-                    }, 80);
-                  }
-                }
-                break;
-              }
-              case 'source_error':
-                setCompletedSources((prev) => prev + 1);
-                break;
-              case 'complete':
-                setCompletedSources(payload.completedSources || totalSources);
-                // 完成前确保将缓冲写入
-                if (pendingResultsRef.current.length > 0) {
-                  const toAppend = pendingResultsRef.current;
-                  pendingResultsRef.current = [];
-                  if (flushTimerRef.current) {
-                    clearTimeout(flushTimerRef.current);
-                    flushTimerRef.current = null;
-                  }
-                  startTransition(() => {
-                    setSearchResults((prev) => prev.concat(toAppend));
-                  });
-                }
-                setIsLoading(false);
-                try { es.close(); } catch { }
-                if (eventSourceRef.current === es) {
-                  eventSourceRef.current = null;
-                }
-                break;
-            }
-          } catch { }
-        };
-
-        es.onerror = () => {
-          setIsLoading(false);
-          // 错误时也清空缓冲
-          if (pendingResultsRef.current.length > 0) {
-            const toAppend = pendingResultsRef.current;
-            pendingResultsRef.current = [];
-            if (flushTimerRef.current) {
-              clearTimeout(flushTimerRef.current);
-              flushTimerRef.current = null;
-            }
-            startTransition(() => {
-              setSearchResults((prev) => prev.concat(toAppend));
-            });
-          }
-          try { es.close(); } catch { }
-          if (eventSourceRef.current === es) {
-            eventSourceRef.current = null;
-          }
-        };
-      } else {
-        // 传统搜索：使用普通接口
-        fetch(`/api/search?q=${encodeURIComponent(trimmed)}`)
-          .then(response => response.json())
-          .then(data => {
-            if (currentQueryRef.current !== trimmed) return;
-
-            if (data.results && Array.isArray(data.results)) {
-              const activeYearOrder = (viewMode === 'agg' ? (filterAgg.yearOrder) : (filterAll.yearOrder));
-              const results: SearchResult[] =
-                activeYearOrder === 'none'
-                  ? sortBatchForNoOrder(data.results as SearchResult[])
-                  : (data.results as SearchResult[]);
-
-              setSearchResults(results);
-              setTotalSources(1);
-              setCompletedSources(1);
-            }
-            setIsLoading(false);
-          })
-          .catch(() => {
-            setIsLoading(false);
-          });
-      }
       setShowSuggestions(false);
 
-      // 保存到搜索历史 (事件监听会自动更新界面)
+      // 每次搜索时重新读取流式搜索设置
+      if (typeof window !== 'undefined') {
+        const savedFluidSearch = localStorage.getItem('fluidSearch');
+        const next = savedFluidSearch !== null
+          ? JSON.parse(savedFluidSearch)
+          : (window as any).RUNTIME_CONFIG?.FLUID_SEARCH !== false;
+        if (next !== useFluidSearch) setUseFluidSearch(next);
+      }
+
       addSearchHistory(query);
     } else {
       setShowResults(false);
       setShowSuggestions(false);
     }
   }, [searchParams]);
-
-  // 组件卸载时，关闭可能存在的连接
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        try { eventSourceRef.current.close(); } catch { }
-        eventSourceRef.current = null;
-      }
-      if (flushTimerRef.current) {
-        clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = null;
-      }
-      pendingResultsRef.current = [];
-    };
-  }, []);
 
   // 输入框内容变化时触发，显示搜索建议
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -910,7 +943,6 @@ function SearchPageClient() {
       handleTmdbActorSearch(trimmed, tmdbActorType, tmdbFilterState);
     } else {
       // 原有的影视搜索逻辑
-      setIsLoading(true);
       router.push(`/search?q=${encodeURIComponent(trimmed)}`);
       // 其余由 searchParams 变化的 effect 处理
     }
@@ -921,7 +953,6 @@ function SearchPageClient() {
     setShowSuggestions(false);
 
     // 自动执行搜索
-    setIsLoading(true);
     setShowResults(true);
 
     router.push(`/search?q=${encodeURIComponent(suggestion)}`);
@@ -967,7 +998,6 @@ function SearchPageClient() {
                     // 如果有搜索词且当前显示结果，触发影视搜索
                     const currentQuery = searchQuery.trim() || searchParams?.get('q');
                     if (currentQuery && showResults) {
-                      setIsLoading(true);
                       router.push(`/search?q=${encodeURIComponent(currentQuery)}`);
                     }
                   }}
@@ -1111,7 +1141,6 @@ function SearchPageClient() {
 
                   // 回显搜索框
                   setSearchQuery(trimmed);
-                  setIsLoading(true);
                   setShowResults(true);
                   setShowSuggestions(false);
 
