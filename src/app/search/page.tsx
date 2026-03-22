@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps, @typescript-eslint/no-explicit-any,@typescript-eslint/no-non-null-assertion,no-empty */
 'use client';
 
-import { ChevronUp, Search, X } from 'lucide-react';
+import { ChevronUp, Grid2x2, List, Play, Search, X } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, experimental_streamedQuery as streamedQuery } from '@tanstack/react-query';
@@ -135,6 +135,7 @@ function eventSourceIterable(url: string, signal?: AbortSignal): AsyncIterable<S
   };
 }
 
+import ImageViewer from '@/components/ImageViewer';
 import PageLayout from '@/components/PageLayout';
 import SearchResultFilter, { SearchFilterCategory } from '@/components/SearchResultFilter';
 import SearchSuggestions from '@/components/SearchSuggestions';
@@ -164,6 +165,159 @@ function SearchPageClient() {
     if (lowerType.includes('纪录片') || lowerType.includes('documentary')) return 'documentary';
     // 默认根据集数判断
     return episodeCount && episodeCount > 1 ? 'tv' : 'movie';
+  };
+
+  const getSearchResultUrl = (params: {
+    title: string;
+    year?: string;
+    type?: string;
+    source?: string;
+    id?: string;
+    query?: string;
+    isAggregate?: boolean;
+    doubanId?: number;
+  }) => {
+    const yearParam = params.year && params.year !== 'unknown' ? `&year=${params.year}` : '';
+    const queryParam = params.query ? `&stitle=${encodeURIComponent(params.query.trim())}` : '';
+    const typeParam = params.type ? `&stype=${params.type}` : '';
+    const preferParam = params.isAggregate ? '&prefer=true' : '';
+    const doubanParam = params.doubanId && params.doubanId > 0 ? `&douban_id=${params.doubanId}` : '';
+    if (params.isAggregate || !params.source || !params.id) {
+      return `/play?title=${encodeURIComponent(params.title.trim())}${yearParam}${typeParam}${preferParam}${queryParam}${doubanParam}`;
+    }
+    return `/play?source=${params.source}&id=${params.id}&title=${encodeURIComponent(params.title.trim())}${yearParam}${preferParam}${queryParam}${typeParam}${doubanParam}`;
+  };
+
+  const renderTag = (label: string, className: string) => (
+    <span className={`inline-flex items-center rounded-full px-2 py-1 text-[11px] font-medium ${className}`}>
+      {label}
+    </span>
+  );
+
+  const renderListItem = (item: {
+    key: string;
+    title: string;
+    poster: string;
+    year?: string;
+    type: 'movie' | 'tv';
+    episodes?: number;
+    sourceName?: string;
+    sourceNames?: string[];
+    doubanId?: number;
+    desc?: string;
+    vodRemarks?: string;
+    isAggregate?: boolean;
+    source?: string;
+    id?: string;
+    query?: string;
+  }) => {
+    const yearText = item.year && item.year !== 'unknown' ? item.year : '';
+    const sourceTags = item.isAggregate
+      ? Array.from(new Set(item.sourceNames || []))
+      : item.sourceName ? [item.sourceName] : [];
+    const isExpanded = !!expandedSourceTags[item.key];
+    const maxVisibleSourceTags = 3;
+    const visibleSourceTags = isExpanded ? sourceTags : sourceTags.slice(0, maxVisibleSourceTags);
+    const hiddenSourceCount = Math.max(0, sourceTags.length - visibleSourceTags.length);
+    const description = (item.desc || '').trim();
+    const itemUrl = getSearchResultUrl({
+      title: item.title,
+      year: item.year,
+      type: item.type,
+      source: item.source,
+      id: item.id,
+      query: item.query,
+      isAggregate: item.isAggregate,
+      doubanId: item.doubanId,
+    });
+
+    return (
+      <button
+        key={item.key}
+        type='button'
+        onClick={() => router.push(itemUrl)}
+        className='group w-full rounded-2xl border border-gray-200/80 bg-white/90 p-3 text-left shadow-sm transition-all hover:border-green-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900/70 dark:hover:border-green-700'
+      >
+        <div className='flex items-start gap-4'>
+          <div className='relative h-32 w-24 shrink-0 overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-800'>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={item.poster}
+              alt={item.title}
+              className='h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]'
+              loading='lazy'
+              onClick={(e) => {
+                e.stopPropagation();
+                setPreviewImage({ url: item.poster, alt: item.title });
+              }}
+            />
+          </div>
+          <div className='min-w-0 flex-1'>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0 flex-1'>
+                <h3 className='line-clamp-2 text-base font-semibold text-gray-900 dark:text-gray-100'>
+                  {item.title}
+                </h3>
+                <div className='mt-2 flex flex-wrap gap-2'>
+                  {renderTag(
+                    item.type === 'movie' ? '电影' : '剧集',
+                    'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                  )}
+                  {yearText && renderTag(yearText, 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300')}
+                  {item.episodes && item.episodes > 0 && renderTag(
+                    `${item.episodes}集`,
+                    'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                  )}
+                  {item.vodRemarks && renderTag(
+                    item.vodRemarks,
+                    'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                  )}
+                  {item.doubanId && item.doubanId > 0 && renderTag(
+                    '豆瓣',
+                    'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                  )}
+                </div>
+                {description && (
+                  <p className='mt-3 line-clamp-3 text-sm leading-6 text-gray-600 dark:text-gray-400'>
+                    {description}
+                  </p>
+                )}
+              </div>
+              <div className='shrink-0 self-center'>
+                <div className='flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white shadow-md transition-transform group-hover:scale-110 group-hover:bg-green-600'>
+                  <Play className='h-4 w-4 translate-x-0.5' fill='currentColor' />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {sourceTags.length > 0 && (
+          <div className={`mt-3 flex gap-2 ${isExpanded ? 'flex-wrap' : 'flex-nowrap overflow-hidden'}`}>
+            {visibleSourceTags.map((sourceName) => (
+              <span
+                key={`${item.key}-${sourceName}`}
+                className='inline-flex max-w-full shrink-0 items-center truncate rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                title={sourceName}
+              >
+                {sourceName}
+              </span>
+            ))}
+            {hiddenSourceCount > 0 && (
+              <button
+                type='button'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedSourceTags((prev) => ({ ...prev, [item.key]: true }));
+                }}
+                className='inline-flex shrink-0 items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-100 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50'
+              >
+                +{hiddenSourceCount}
+              </button>
+            )}
+          </div>
+        )}
+      </button>
+    );
   };
 
   // 搜索历史
@@ -310,6 +464,15 @@ function SearchPageClient() {
   const [viewMode, setViewMode] = useState<'agg' | 'all'>(() => {
     return getDefaultAggregate() ? 'agg' : 'all';
   });
+  const [resultDisplayMode, setResultDisplayMode] = useState<'card' | 'list'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('searchResultDisplayMode');
+      if (saved === 'card' || saved === 'list') return saved;
+    }
+    return 'card';
+  });
+  const [expandedSourceTags, setExpandedSourceTags] = useState<Record<string, boolean>>({});
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
 
   // 保存虚拟化设置
   const toggleVirtualization = () => {
@@ -1544,7 +1707,40 @@ function SearchPageClient() {
                 </div>
                 
                 {/* 开关控件行 */}
-                <div className='flex items-center justify-end gap-6'>
+                <div className='flex items-center justify-end gap-4'>
+                  {/* 卡片/列表视图切换 */}
+                  <div className='flex items-center rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden'>
+                    <button
+                      type='button'
+                      onClick={() => {
+                        setResultDisplayMode('card');
+                        localStorage.setItem('searchResultDisplayMode', 'card');
+                      }}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm transition-colors ${
+                        resultDisplayMode === 'card'
+                          ? 'bg-green-500 text-white'
+                          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                      }`}
+                      aria-label='切换为卡片视图'
+                    >
+                      <Grid2x2 className='h-4 w-4' />
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => {
+                        setResultDisplayMode('list');
+                        localStorage.setItem('searchResultDisplayMode', 'list');
+                      }}
+                      className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm transition-colors ${
+                        resultDisplayMode === 'list'
+                          ? 'bg-green-500 text-white'
+                          : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800'
+                      }`}
+                      aria-label='切换为列表视图'
+                    >
+                      <List className='h-4 w-4' />
+                    </button>
+                  </div>
                   {/* 虚拟化开关 */}
                   <label className='flex items-center gap-3 cursor-pointer select-none shrink-0 group'>
                     <span className='text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors'>
@@ -1592,8 +1788,8 @@ function SearchPageClient() {
                   </label>
                 </div>
               </div>
-              {/* 搜索结果网格 */}
-              {useVirtualization ? (
+              {/* 搜索结果网格/列表 */}
+              {useVirtualization && resultDisplayMode === 'card' ? (
                 <div key={`search-results-${viewMode}`}>
                   {viewMode === 'agg' ? (
                     <VirtualGrid
@@ -1658,18 +1854,35 @@ function SearchPageClient() {
                 </div>
               ) : (
                 <div
-                  key={`search-results-${viewMode}`}
-                  className='justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'
+                  key={`search-results-${viewMode}-${resultDisplayMode}`}
+                  className={resultDisplayMode === 'list'
+                    ? 'space-y-4'
+                    : 'justify-start grid grid-cols-3 gap-x-2 gap-y-14 sm:gap-y-20 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fill,_minmax(11rem,_1fr))] sm:gap-x-8'
+                  }
                 >
                   {viewMode === 'agg'
                     ? filteredAggResults.map(([mapKey, group]) => {
                       const title = group[0]?.title || '';
                       const poster = group[0]?.poster || '';
                       const year = group[0]?.year || 'unknown';
+                      const desc = group.find((e) => e.desc?.trim())?.desc || '';
+                      const vodRemarks = group.find((e) => (e as any).remarks?.trim())?.remarks || '';
                       const { episodes, source_names, douban_id } = computeGroupStats(group);
                       const type = episodes === 1 ? 'movie' : 'tv';
                       if (!groupStatsRef.current.has(mapKey)) {
                         groupStatsRef.current.set(mapKey, { episodes, source_names, douban_id });
+                      }
+                      if (resultDisplayMode === 'list') {
+                        return renderListItem({
+                          key: `agg-${mapKey}`,
+                          title, poster, year, type, episodes,
+                          sourceNames: source_names,
+                          doubanId: douban_id,
+                          desc,
+                          vodRemarks,
+                          isAggregate: true,
+                          query: searchQuery.trim() !== title ? searchQuery.trim() : '',
+                        });
                       }
                       return (
                         <div key={`agg-${mapKey}`} className='w-full'>
@@ -1689,24 +1902,44 @@ function SearchPageClient() {
                         </div>
                       );
                     })
-                    : filteredAllResults.map((item) => (
-                      <div key={`all-${item.source}-${item.id}`} className='w-full'>
-                        <VideoCard
-                          id={item.id}
-                          title={item.title}
-                          poster={item.poster}
-                          episodes={item.episodes.length}
-                          source={item.source}
-                          source_name={item.source_name}
-                          douban_id={item.douban_id}
-                          query={searchQuery.trim() !== item.title ? searchQuery.trim() : ''}
-                          year={item.year}
-                          from='search'
-                          type={inferTypeFromName(item.type_name, item.episodes.length)}
-                          remarks={item.remarks}
-                        />
-                      </div>
-                    ))}
+                    : filteredAllResults.map((item) => {
+                      const type = inferTypeFromName(item.type_name, item.episodes.length) as 'movie' | 'tv';
+                      if (resultDisplayMode === 'list') {
+                        return renderListItem({
+                          key: `all-${item.source}-${item.id}`,
+                          id: item.id,
+                          title: item.title,
+                          poster: item.poster,
+                          episodes: item.episodes.length,
+                          source: item.source,
+                          sourceName: item.source_name,
+                          doubanId: item.douban_id,
+                          query: searchQuery.trim() !== item.title ? searchQuery.trim() : '',
+                          year: item.year,
+                          type,
+                          desc: (item as any).desc,
+                          vodRemarks: item.remarks,
+                        });
+                      }
+                      return (
+                        <div key={`all-${item.source}-${item.id}`} className='w-full'>
+                          <VideoCard
+                            id={item.id}
+                            title={item.title}
+                            poster={item.poster}
+                            episodes={item.episodes.length}
+                            source={item.source}
+                            source_name={item.source_name}
+                            douban_id={item.douban_id}
+                            query={searchQuery.trim() !== item.title ? searchQuery.trim() : ''}
+                            year={item.year}
+                            from='search'
+                            type={inferTypeFromName(item.type_name, item.episodes.length)}
+                            remarks={item.remarks}
+                          />
+                        </div>
+                      );
+                    })}
                 </div>
               )}
 
@@ -1877,6 +2110,15 @@ function SearchPageClient() {
           )}
         </div>
       </div>
+
+      {previewImage && (
+        <ImageViewer
+          isOpen={!!previewImage}
+          onClose={() => setPreviewImage(null)}
+          imageUrl={previewImage.url}
+          alt={previewImage.alt}
+        />
+      )}
 
       {/* 返回顶部悬浮按钮 */}
       <button
