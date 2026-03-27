@@ -206,6 +206,14 @@ export interface SearchResult {
     vote_average?: number;
     tmdb_id?: number;
   };
+  // Emby 音轨信息
+  private_audio_streams?: Array<{
+    index: number;
+    display_title?: string;
+    language?: string;
+    codec?: string;
+    is_default: boolean;
+  }>;
 }
 
 // 豆瓣数据结构
