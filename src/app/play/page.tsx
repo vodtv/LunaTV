@@ -1864,6 +1864,11 @@ function PlayPageClient() {
   useEffect(() => {
     const isEmbySource = detail?.source === 'emby' || detail?.source?.startsWith('emby_');
 
+    if (!isEmbySource || !detail) {
+      resetAudioTrackState();
+      return;
+    }
+
     console.log('🎵 音轨加载检查:', {
       isEmbySource,
       hasDetail: !!detail,
@@ -1871,11 +1876,6 @@ function PlayPageClient() {
       audioStreams: (detail as any)?.private_audio_streams,
       currentEpisodeIndex,
     });
-
-    if (!isEmbySource || !detail) {
-      resetAudioTrackState();
-      return;
-    }
 
     // 处理音轨数据的辅助函数
     const processAudioTracks = (rawTracks: any[]) => {
