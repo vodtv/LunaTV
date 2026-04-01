@@ -5,7 +5,7 @@
 import { ChevronRight, Film, Tv, Calendar, Sparkles, Play, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { Suspense, useEffect, useState, useRef, useMemo, useReducer, useTransition } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, queryOptions } from '@tanstack/react-query';
 
 import {
   BangumiCalendarData,
@@ -108,6 +108,21 @@ const homeReducer = (state: HomeState, action: HomeAction): HomeState => {
       return state;
   }
 };
+
+// Query Options 工厂函数
+const allFavoritesOptions = () => queryOptions({
+  queryKey: ['favorites'],
+  queryFn: () => getAllFavorites(),
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+});
+
+const allPlayRecordsOptions = () => queryOptions({
+  queryKey: ['playRecords'],
+  queryFn: () => getAllPlayRecords(),
+  staleTime: 5 * 60 * 1000,
+  gcTime: 10 * 60 * 1000,
+});
 
 function HomeClient() {
   // 🚀 TanStack Query - 首页数据查询（替代 GlobalCache）
@@ -266,20 +281,10 @@ function HomeClient() {
   }, [announcement]);
 
   // 🚀 TanStack Query - 使用 useQuery 获取收藏数据（自动缓存，跨页面持久化）
-  const { data: allFavorites = {} } = useQuery({
-    queryKey: ['favorites'],
-    queryFn: () => getAllFavorites(),
-    staleTime: 5 * 60 * 1000, // 5分钟内数据保持新鲜
-    gcTime: 10 * 60 * 1000, // 10分钟后垃圾回收
-  });
+  const { data: allFavorites = {} } = useQuery(allFavoritesOptions());
 
   // 🚀 TanStack Query - 使用 useQuery 获取播放记录（自动缓存，跨页面持久化）
-  const { data: allPlayRecords = {} } = useQuery({
-    queryKey: ['playRecords'],
-    queryFn: () => getAllPlayRecords(),
-    staleTime: 5 * 60 * 1000, // 5分钟内数据保持新鲜
-    gcTime: 10 * 60 * 1000, // 10分钟后垃圾回收
-  });
+  const { data: allPlayRecords = {} } = useQuery(allPlayRecordsOptions());
 
   // 收藏夹数据
   type FavoriteItem = {
