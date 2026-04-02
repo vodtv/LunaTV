@@ -498,11 +498,11 @@ export const UserMenu: React.FC = () => {
   // 检查是否显示更新提醒按钮（登录用户且非localstorage存储就显示）
   const showWatchingUpdates = authInfo?.username && storageType !== 'localstorage';
 
-  // 检查是否有实际更新（用于显示红点）- 只检查新剧集更新
-  const hasActualUpdates = watchingUpdates && (watchingUpdates.updatedCount || 0) > 0;
+  // 检查是否有实际更新（用于显示红点）- 包括新剧集更新和新上映
+  const hasActualUpdates = watchingUpdates && ((watchingUpdates.updatedCount || 0) > 0 || (watchingUpdates.newReleasesCount || 0) > 0);
 
-  // 计算更新数量（只统计新剧集更新）
-  const totalUpdates = watchingUpdates?.updatedCount || 0;
+  // 计算更新数量（新剧集更新 + 新上映）
+  const totalUpdates = (watchingUpdates?.updatedCount || 0) + (watchingUpdates?.newReleasesCount || 0);
 
   // 调试信息
   console.log('UserMenu 更新提醒调试:', {
@@ -946,6 +946,51 @@ export const UserMenu: React.FC = () => {
                 </div>
                 <div className='text-xs text-gray-400 dark:text-gray-500 mt-2'>
                   系统会定期检查您观看过的剧集是否有新集数更新
+                </div>
+              </div>
+            )}
+            {/* 新上映的剧集 */}
+            {watchingUpdates && watchingUpdates.updatedSeries.filter(series => series.hasNewRelease).length > 0 && (
+              <div className='mb-8'>
+                <div className='flex items-center gap-2 mb-4'>
+                  <h4 className='text-lg font-semibold text-gray-900 dark:text-white'>
+                    🎬 新上映
+                  </h4>
+                  <div className='flex items-center gap-1'>
+                    <div className='w-2 h-2 bg-green-500 rounded-full animate-pulse'></div>
+                    <span className='text-sm text-green-500 font-medium'>
+                      {watchingUpdates.updatedSeries.filter(series => series.hasNewRelease).length}部收藏已上映
+                    </span>
+                  </div>
+                </div>
+
+                <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4'>
+                  {watchingUpdates.updatedSeries
+                    .filter(series => series.hasNewRelease)
+                    .map((series, index) => (
+                      <div key={`release-${series.title}_${series.year}_${index}`} className='relative group/card'>
+                        <div className='relative group-hover/card:z-5 transition-all duration-300'>
+                          <VideoCard
+                            title={series.title}
+                            poster={series.cover}
+                            year={series.year}
+                            source={series.sourceKey}
+                            source_name={series.source_name}
+                            episodes={series.totalEpisodes}
+                            id={series.videoId}
+                            onDelete={undefined}
+                            type={series.totalEpisodes > 1 ? 'tv' : 'movie'}
+                            from="favorite"
+                            remarks={series.remarks}
+                            releaseDate={series.releaseDate}
+                          />
+                        </div>
+                        {/* 新上映徽章 */}
+                        <div className='absolute -top-2 -right-2 bg-green-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
+                          新上映
+                        </div>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
