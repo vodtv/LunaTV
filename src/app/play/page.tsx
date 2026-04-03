@@ -1915,7 +1915,8 @@ function PlayPageClient() {
 
       console.log('🎵 当前选中音轨:', selectedTrackIndex);
 
-      // 应用用户偏好
+      // 应用用户偏好 - 仅更新状态，不触发URL变更
+      // URL变更由换集逻辑或用户手动切换音轨时处理
       const preferredLang = loadPreferredAudioLang();
       if (!preferredLang) return;
 
@@ -1923,15 +1924,12 @@ function PlayPageClient() {
         t => normalizeAudioLang(t.language) === preferredLang
       );
 
-      if (!preferredTrack || preferredTrack.index === selectedTrackIndex) {
-        return;
-      }
-
-      const targetUrl = appendAudioStreamIndex(activeUrl, preferredTrack.index);
-      setCurrentAudioTrack(preferredTrack.index);
-      if (targetUrl && targetUrl !== activeUrl) {
-        console.log('🎵 应用偏好音轨，切换URL:', targetUrl);
-        setVideoUrl(targetUrl);
+      if (preferredTrack && preferredTrack.index !== selectedTrackIndex) {
+        console.log('🎵 找到偏好音轨，更新选择状态:', preferredTrack.name);
+        setCurrentAudioTrack(preferredTrack.index);
+        // 注意：不调用setVideoUrl()，避免触发initPlayer
+        // 换集时，updateVideoUrl会处理音轨参数
+        // 用户手动切换音轨时，handleAudioTrackSelect会处理
       }
     };
 
@@ -2003,7 +2001,7 @@ function PlayPageClient() {
     }
 
     processAudioTracks(rawTracks);
-  }, [currentEpisodeIndex, detail, resetAudioTrackState, videoUrl]);
+  }, [currentEpisodeIndex, detail, resetAudioTrackState]);
 
   // 处理音轨切换
   const handleAudioTrackSelect = async (track: typeof audioTracks[0]) => {
@@ -2146,7 +2144,14 @@ function PlayPageClient() {
       }
     } else {
       // 普通视频格式
-      const newUrl = episodeData || '';
+      let newUrl = episodeData || '';
+
+      // ✅ 关键修复：对于Emby源，如果有偏好音轨，添加AudioStreamIndex参数
+      const isEmbySource = detailData.source === 'emby' || detailData.source?.startsWith('emby_');
+      if (isEmbySource && newUrl && currentAudioTrackRef.current >= 0) {
+        newUrl = appendAudioStreamIndex(newUrl, currentAudioTrackRef.current);
+        console.log('🎵 换集时应用音轨参数:', currentAudioTrackRef.current);
+      }
 
       if (newUrl !== videoUrl) {
         setVideoUrl(newUrl);
@@ -2274,45 +2279,63 @@ function PlayPageClient() {
       clearTimeout(episodeSwitchTimeoutRef.current);
       episodeSwitchTimeoutRef.current = null;
     }
-    
+
     // 清理弹幕状态引用
     danmuPluginStateRef.current = null;
-    
+
     if (artPlayerRef.current) {
       try {
-        // 1. 清理弹幕插件的WebWorker
+        // 🔥 关键：先保存 video 和 hls 引用
+        const video = artPlayerRef.current.video;
+        const hls = video?.hls;
+
+        // 清理弹幕插件
         if (artPlayerRef.current.plugins?.artplayerPluginDanmuku) {
           const danmukuPlugin = artPlayerRef.current.plugins.artplayerPluginDanmuku;
-          
-          // 尝试获取并清理WebWorker
           if (danmukuPlugin.worker && typeof danmukuPlugin.worker.terminate === 'function') {
             danmukuPlugin.worker.terminate();
-            console.log('弹幕WebWorker已清理');
+            console.log('[Cleanup] 弹幕WebWorker已清理');
           }
-          
-          // 清空弹幕数据
           if (typeof danmukuPlugin.reset === 'function') {
             danmukuPlugin.reset();
           }
         }
 
-        // 2. 销毁HLS实例
-        if (artPlayerRef.current.video.hls) {
-          artPlayerRef.current.video.hls.destroy();
-          console.log('HLS实例已销毁');
-        }
-
-        // 3. 销毁ArtPlayer实例 (使用false参数避免DOM清理冲突)
+        // 1. 先销毁 ArtPlayer，停止所有控制
         artPlayerRef.current.destroy(false);
         artPlayerRef.current = null;
-        setPlayerReady(false); // 重置播放器就绪状态
+        setPlayerReady(false);
+        console.log('[Cleanup] ArtPlayer已销毁');
+
+        // 2. 然后清理 video 和 HLS
+        if (video) {
+          video.pause();
+          console.log('[Cleanup] 视频已暂停');
+        }
+
+        if (hls) {
+          try {
+            hls.stopLoad();
+            hls.detachMedia();
+            hls.destroy();
+            console.log('[Cleanup] HLS已清理');
+          } catch (err) {
+            console.warn('[Cleanup] HLS清理出错:', err);
+          }
+        }
+
+        if (video) {
+          video.removeAttribute('src');
+          video.load();
+          video.src = '';
+          console.log('[Cleanup] video src已清空');
+        }
 
         console.log('播放器资源已清理');
       } catch (err) {
         console.warn('清理播放器资源时出错:', err);
-        // 即使出错也要确保引用被清空
         artPlayerRef.current = null;
-        setPlayerReady(false); // 重置播放器就绪状态
+        setPlayerReady(false);
       }
     }
   };
@@ -4032,31 +4055,6 @@ function PlayPageClient() {
         return;
       }
 
-    // 🔥 在初始化新播放器之前，先清理旧的播放器实例
-    if (artPlayerRef.current) {
-      console.log('[Play] 检测到旧播放器实例，先清理');
-
-      // 🔥 关键修复：如果处于网页全屏状态，先退出网页全屏
-      // 原因：ArtPlayer设置了FULLSCREEN_WEB_IN_BODY=true时，网页全屏会把播放器移到body下
-      // 如果不先退出全屏就destroy，播放器容器位置会错乱，导致新播放器只有声音没有画面
-      // 参考ArtPlayer源码：packages/artplayer/src/player/fullscreenWebMix.js
-      const wasFullscreenWeb = artPlayerRef.current.fullscreenWeb;
-
-      if (wasFullscreenWeb) {
-        console.log('[Play] 检测到网页全屏状态，先退出网页全屏（稍后恢复）');
-        artPlayerRef.current.fullscreenWeb = false;
-        // 等待DOM恢复到原容器位置（fullscreenWeb setter会调用append($container, $player)）
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-
-      await cleanupPlayer();
-
-      // 🔥 标记需要恢复网页全屏状态
-      if (wasFullscreenWeb) {
-        (window as any).__shouldRestoreFullscreenWeb = true;
-      }
-    }
-
     // 确保选集索引有效
     if (
       !detail ||
@@ -4181,39 +4179,24 @@ function PlayPageClient() {
 
         switchPromiseRef.current = switchPromise;
         await switchPromise;
-
+        
         if (artPlayerRef.current?.video) {
           ensureVideoSource(
             artPlayerRef.current.video as HTMLVideoElement,
             videoUrl
           );
         }
-
+        
         // 🚀 移除原有的 setTimeout 弹幕加载逻辑，交由 useEffect 统一优化处理
-
-        console.log('✅ 使用switch方法成功切换视频（保持全屏状态）');
+        
+        console.log('使用switch方法成功切换视频');
         return;
       } catch (error) {
-        console.warn('⚠️ Switch方法失败，将重建播放器:', error);
+        console.warn('Switch方法失败，将重建播放器:', error);
         // 重置集数切换标识
         isEpisodeChangingRef.current = false;
-
-        // 🔥 记录网页全屏状态，重建后恢复
-        const wasFullscreenWeb = artPlayerRef.current?.fullscreenWeb || false;
-
         // 如果switch失败，清理播放器并重新创建
-        if (wasFullscreenWeb && artPlayerRef.current) {
-          console.log('[Play] Switch失败，退出网页全屏后重建（稍后恢复）');
-          artPlayerRef.current.fullscreenWeb = false;
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
         await cleanupPlayer();
-
-        // 标记需要恢复网页全屏
-        if (wasFullscreenWeb) {
-          (window as any).__shouldRestoreFullscreenWeb = true;
-        }
       }
     }
     if (artPlayerRef.current) {
@@ -4830,18 +4813,6 @@ function PlayPageClient() {
       artPlayerRef.current.on('ready', async () => {
         setError(null);
         setPlayerReady(true); // 标记播放器已就绪，启用观影室同步
-
-        // 🔥 恢复网页全屏状态（如果之前是全屏的）
-        if ((window as any).__shouldRestoreFullscreenWeb) {
-          console.log('[Play] 恢复网页全屏状态');
-          // 延迟一下确保播放器完全初始化
-          setTimeout(() => {
-            if (artPlayerRef.current) {
-              artPlayerRef.current.fullscreenWeb = true;
-            }
-            (window as any).__shouldRestoreFullscreenWeb = false;
-          }, 200);
-        }
 
         // 使用ArtPlayer layers API添加分辨率徽章（带渐变和发光效果）
         const video = artPlayerRef.current.video as HTMLVideoElement;
