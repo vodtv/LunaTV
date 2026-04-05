@@ -4139,6 +4139,10 @@ function PlayPageClient() {
         const isEpisodeChange = isEpisodeChangingRef.current;
         const currentTime = artPlayerRef.current.currentTime || 0;
 
+        // 在切换前从 localStorage 重新读取播放速率，确保使用最新保存的值
+        const savedPlaybackRate = loadPlaybackRate();
+        lastPlaybackRateRef.current = savedPlaybackRate;
+
         let switchPromise: Promise<any>;
         if (isEpisodeChange) {
           console.log(`🎯 开始切换集数: ${videoUrl} (重置播放时间到0)`);
@@ -4179,7 +4183,13 @@ function PlayPageClient() {
 
         switchPromiseRef.current = switchPromise;
         await switchPromise;
-        
+
+        // 切换后立即恢复播放速率，防止被重置
+        if (artPlayerRef.current) {
+          artPlayerRef.current.playbackRate = savedPlaybackRate;
+          console.log(`✅ 恢复播放速率: ${savedPlaybackRate}x`);
+        }
+
         if (artPlayerRef.current?.video) {
           ensureVideoSource(
             artPlayerRef.current.video as HTMLVideoElement,
