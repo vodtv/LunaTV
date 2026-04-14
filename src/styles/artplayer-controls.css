@@ -13,13 +13,10 @@
 }
 
 /* ===== Volume Control Hover Fix ===== */
-/* 修复音量面板鼠标移动时消失的问题 - 参考 ArtPlayer 官方实现 */
+/* 修复音量面板 hover 时消失的问题 - 让面板始终接收鼠标事件 */
 @media (hover: hover) {
-  /* 扩展音量面板高度，覆盖按钮区域，确保hover不丢失 */
   .art-volume-panel {
-    bottom: 0 !important;
-    height: calc(var(--art-volume-height, 120px) + var(--art-control-height, 38px)) !important;
-    padding-bottom: var(--art-control-height, 38px) !important;
+    pointer-events: auto !important;
   }
 }
 
