@@ -222,18 +222,18 @@ function HeroBanner({
       return;
     }
 
-    let isMounted = true;
-
     const checkAndRefreshMissingTrailers = async () => {
       for (const item of items) {
         // 检查组件是否仍然挂载
-        if (!isMounted) break;
+        if (!isMountedRef.current) break;
 
         // 如果有 douban_id 但没有 trailerUrl，尝试获取
         if (item.douban_id && !item.trailerUrl && !refreshedTrailerUrls[item.douban_id]) {
           console.log('[HeroBanner] 检测到缺失的 trailer，尝试获取:', item.title);
           try {
             await refreshTrailerUrl(item.douban_id);
+            // 再次检查组件是否仍然挂载
+            if (!isMountedRef.current) break;
           } catch (error) {
             // 忽略错误，继续处理下一个
             console.warn('[HeroBanner] 获取 trailer 失败:', error);
@@ -244,13 +244,12 @@ function HeroBanner({
 
     // 延迟执行，避免阻塞初始渲染
     const timer = setTimeout(() => {
-      if (isMounted) {
+      if (isMountedRef.current) {
         checkAndRefreshMissingTrailers();
       }
     }, 1000);
 
     return () => {
-      isMounted = false;
       clearTimeout(timer);
     };
   }, [items, refreshedTrailerUrls, refreshTrailerUrl, enableVideo]);
@@ -336,13 +335,16 @@ function HeroBanner({
 
                         // 重新刷新URL
                         const newUrl = await refreshTrailerUrl(item.douban_id);
+                        // 再次检查组件是否仍然挂载，避免在卸载后操作 video 元素
                         if (newUrl && isMountedRef.current) {
                           // 重新加载视频
                           video.load();
                         }
                       } catch (error) {
                         // 静默处理错误，避免页面崩溃
-                        console.warn('[HeroBanner] 刷新trailer URL失败，将继续显示背景图片:', error);
+                        if (isMountedRef.current) {
+                          console.warn('[HeroBanner] 刷新trailer URL失败，将继续显示背景图片:', error);
+                        }
                       }
                     }
                   }}
