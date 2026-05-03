@@ -58,6 +58,14 @@ function HeroBanner({
   const refreshTrailerMutation = useRefreshTrailerUrlMutation();
   const clearTrailerMutation = useClearTrailerUrlMutation();
 
+  // 重置越界的 currentIndex
+  useEffect(() => {
+    if (items.length > 0 && currentIndex >= items.length) {
+      console.warn('[HeroBanner] currentIndex out of bounds, resetting to 0');
+      setCurrentIndex(0);
+    }
+  }, [items.length, currentIndex]);
+
   // 处理图片 URL，使用代理绕过防盗链
   const getProxiedImageUrl = (url: string) => {
     if (url?.includes('douban') || url?.includes('doubanio')) {
@@ -203,7 +211,16 @@ function HeroBanner({
     return null;
   }
 
-  const currentItem = items[currentIndex];
+  // 确保 currentIndex 在有效范围内
+  const safeIndex = Math.min(currentIndex, items.length - 1);
+  const currentItem = items[safeIndex];
+
+  // 防御性检查：如果 currentItem 仍然是 undefined，返回 null
+  if (!currentItem) {
+    console.error('[HeroBanner] currentItem is undefined, items:', items, 'currentIndex:', currentIndex);
+    return null;
+  }
+
   const backgroundImage = getHDBackdrop(currentItem.backdrop) || currentItem.poster;
 
   // 🔍 调试日志
