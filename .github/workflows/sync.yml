@@ -27,7 +27,7 @@ jobs:
       # Step 2: 添加上游仓库并拉取 main 分支
       - name: Add upstream and fetch
         run: |
-          git remote add upstream https://github.com/SzeMeng76/LunaTV.git
+          git remote add upstream https://github.com/SzeMeng76/LunaTV
           git fetch upstream
 
       # Step 3: 合并上游 main 分支到当前 main
